@@ -1,0 +1,4 @@
+time,leftEncoderCount,rightEncoderCount
+rst:0x1,"(POWERON_RESET),boot:0x13",(SPI_FAST_FLASH_BOOT)
+configsip:,"0,",SPIWP:0xee
+"mode:DIO,",clock,div:1
