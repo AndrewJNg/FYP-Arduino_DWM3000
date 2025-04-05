@@ -2,6 +2,14 @@
 #define rec_Bot_ID 'B'
 #include "UWB.h"
 
+/*
+[0x41, 0x88, 0x00, 0xCA, 0xDE]             // Fixed header (5 bytes)
+[Bot_ID_H, Bot_ID_L, Rec_ID_H, Rec_ID_L]   // 2-byte sender and receiver IDs
+[0xE0 / 0xE1 / 0xE2]                        // Message type (start, response, final)
+[0x06 to 0x01]                              // Pos (x,y,z) & Vel (x,y,z) – 6 bytes
+[8 bytes]                                   // Timestamps
+[2 bytes]                                   // Final chip-related bytes
+*/
 ////////////////////////////////// 5 bit fixed for protocol,  Sender ID        , Protocol messages                            , Send Time (16,17), (18,19) not sure, 20)
 static uint8_t const_receive_msg[] = { 0x41, 0x88, 0, 0xCA, 0xDE };
 static uint8_t tx_resp_msg[] = { 0x41, 0x88, 0, 0xCA, 0xDE, Bot_ID, Bot_ID, rec_Bot_ID, rec_Bot_ID, 0xE1, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
@@ -13,13 +21,14 @@ void setup() {
 }
 
 void loop() {
+  Anchor_set_receive_mode();      // Actively listen to messages
+  Anchor_waiting_for_response();  // Respond to messages if it is called
+}
+void Anchor_set_receive_mode() {
   // Activate reception immediately (no timeout).
   dwt_setrxtimeout(0);
   dwt_rxenable(DWT_START_RX_IMMEDIATE);
-
-  Anchor_waiting_for_response();
 }
-
 void Anchor_waiting_for_response() {
   // Wait for a received frame or error/timeout.
   while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_ERR))) {
@@ -27,14 +36,14 @@ void Anchor_waiting_for_response() {
 
   // If a valid frame is received, process the message.
   if (status_reg & SYS_STATUS_RXFCG_BIT_MASK) {
-    process_received_message();
+    Anchor_process_received_message();
   } else {
     // Clear RX error events in the DW IC status register.
     dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
   }
 }
 
-void process_received_message() {
+void Anchor_process_received_message() {
   uint32_t frame_len;
 
   ////////////////////////////////////////////////////////////////////////
@@ -51,8 +60,6 @@ void process_received_message() {
 
     // Check if the received message matches the expected format.
     if (memcmp(rx_buffer, const_receive_msg, ALL_MSG_COMMON_LEN) == 0) {
-
-
       uint32_t resp_tx_time;
       int ret;
       static uint64_t T_reply_start, T_reply_end;
@@ -89,11 +96,5 @@ void process_received_message() {
     }
   }
 
-  Serial.print("Received data: ");
-  for (int i = 0; i < frame_len; i++) {
-    if (rx_buffer[i] < 0x10) Serial.print("0");  // Pad single-digit hex
-    Serial.print(rx_buffer[i], HEX);
-    Serial.print(" ");
-  }
-  Serial.println();
+  printRxBuffer(rx_buffer, frame_len);
 }

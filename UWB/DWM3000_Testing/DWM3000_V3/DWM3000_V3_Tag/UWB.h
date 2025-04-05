@@ -100,3 +100,28 @@ void UWB_setup() {
   Serial.println("Range Tag");
   Serial.println("Setup over........");
 }
+
+void printRxBuffer(uint8_t* buffer, uint16_t length) {
+  Serial.print("Received data: ");
+  for (uint16_t i = 0; i < length; i++) {
+    if (buffer[i] < 0x10) Serial.print("0");  // Pad single-digit hex with zero
+    Serial.print(buffer[i], HEX);
+    Serial.print(" ");
+  }
+  Serial.println();
+}
+
+
+// void printDistBuffer(uint8_t* buffer, uint16_t length, double distance) {
+//   // Decode Bot IDs (assumed positions: sender ID = [5,6], receiver ID = [7,8])
+//   char sender_id[3] = { (char)buffer[5], (char)buffer[6], '\0' };
+//   char receiver_id[3] = { (char)buffer[7], (char)buffer[8], '\0' };
+
+//   Serial.print("\tSender ID: ");
+//   Serial.print(sender_id);
+//   Serial.print("\tReceiver ID: ");
+//   Serial.print(receiver_id);
+//   Serial.print("\tDist: ");
+//   Serial.println(distance);
+
+// }
