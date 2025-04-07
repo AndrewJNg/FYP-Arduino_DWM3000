@@ -2,54 +2,14 @@
 #define rec_Bot_ID 0xAA
 #include "UWB.h"
 
-/*
-[0x41, 0x88, 0x00, 0xCA, 0xDE]             // Fixed header (5 bytes)
-[Bot_ID_H, Bot_ID_L, Rec_ID_H, Rec_ID_L]   // 2-byte sender and receiver IDs
-[0xE0 / 0xE1 / 0xE2]                        // Message type (start, response, final)
-[0x06 to 0x01]                              // Pos (x,y,z) & Vel (x,y,z) – 6 bytes
-[8 bytes]                                   // Timestamps
-[2 bytes]                                   // Final chip-related bytes
-*/
-typedef struct {
-  uint16_t sender_id;
-  uint16_t receiver_id;
-  uint8_t message_type;  // 0xE0 / 0xE1 / 0xE2
-
-  int8_t position[3];  // x, y, z
-  int8_t velocity[3];  // vx, vy, vz
-
-  uint8_t timestamps[8];  // hidden from top-level, but available if needed
-  uint8_t chip_bytes[2];  // reserved
-} UWBMessage_t;
-
-////////////////////////////////// 5 bit fixed for protocol,  Sender ID        , Protocol messages                            , Send Time (16,17), (18,19) not sure, 20)
-static uint8_t const_receive_msg[] = { 0x41, 0x88, 0, 0xCA, 0xDE, Bot_ID, Bot_ID };
-// static uint8_t tx_poll_msg[] = { 0x41, 0x88, 0, 0xCA, 0xDE, Bot_ID, Bot_ID, rec_Bot_ID, rec_Bot_ID, 0xE0, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0, 0 };
-
-
 void setup() {
   UWB_setup();
 }
 
-/*
-Level 5 
-int get_UWB_Distance(&current_device_address, &communication_device_address, displacement, velocity)  //Obtain the distance in metre between this device and targeted communication device
-int scan_for_messages(&current_device_address, &communication_device_address)   //if it receive a message, reply to them (if it ask from current_device_address) or check if these is any new device on network, 
-        if new device detected, return 1
-
-Level 4
-
-
-
-
-
-
-*/
-// UWBMessage_t myMessage;
 void loop() {
 
   Serial.print("DIST: ");
-  Serial.println(get_UWB_Distance(0xCCCC, 0xAAAA));
+  Serial.println(get_UWB_Distance(Bot_ID, rec_Bot_ID));
   Sleep(500);
 }
 
@@ -59,7 +19,6 @@ double get_UWB_Distance(uint16_t sender_id, uint16_t receiver_id) {
   distance = Tag_waiting_for_response(sender_id, receiver_id);
   return distance;
 }
-
 
 // Step 1: Tag Sends Initial Message (Poll)
 void Tag_set_send_mode(uint16_t sender_id, uint16_t receiver_id) {
@@ -148,42 +107,4 @@ double Tag_process_received_message(uint16_t sender_id, uint16_t receiver_id) {
   } else distance = -1;
 
   return distance;
-}
-
-void generate_msg(uint8_t *tx_msg,
-                  uint8_t frame_seq_nb,
-                  uint16_t sender_id,
-                  uint16_t receiver_id,
-                  int8_t position[3],
-                  int8_t velocity[3],
-                  uint8_t message_type,
-                  uint8_t *timestamps)  // can be NULL
-{
-  tx_msg[0] = 0x41;
-  tx_msg[1] = 0x88;
-  tx_msg[2] = frame_seq_nb;
-  tx_msg[3] = 0xCA;
-  tx_msg[4] = 0xDE;
-
-  tx_msg[5] = (sender_id >> 8) & 0xFF;  // sender_id high byte
-  tx_msg[6] = sender_id & 0xFF;         // sender_id low byte
-
-  tx_msg[7] = (receiver_id >> 8) & 0xFF;  // receiver_id high byte
-  tx_msg[8] = receiver_id & 0xFF;         // receiver_id low byte
-
-  tx_msg[9] = position[0];
-  tx_msg[10] = position[1];
-  tx_msg[11] = position[2];
-
-  tx_msg[12] = velocity[0];
-  tx_msg[13] = velocity[1];
-  tx_msg[14] = velocity[2];
-
-  tx_msg[15] = message_type;
-
-  // Default timestamps to 0
-  tx_msg[16] = 0x00;
-  tx_msg[17] = 0x00;
-
-  // Total: 18 bytes — you can extend this if you're using all 8 timestamps/chip bytes
 }

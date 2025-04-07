@@ -6,6 +6,9 @@
 #define PIN_RST 27
 #define PIN_IRQ 34
 #define PIN_SS 4
+// #define PIN_RST 33
+// #define PIN_IRQ 40  // Pin IRQ is useless for now, set to arbitary pin to not cause conflict
+// #define PIN_SS 32
 
 #define RNG_DELAY_MS 1000
 #define TX_ANT_DLY 16385
@@ -111,6 +114,56 @@ void printRxBuffer(uint8_t* buffer, uint16_t length) {
   Serial.println();
 }
 
+//////////////////////////////////////////////////////////////////////////////////////
+// Function to generate new UWB messages to be sent over 
+/*
+[0x41, 0x88, 0x00, 0xCA, 0xDE]             // Fixed header (5 bytes)
+[Bot_ID_H, Bot_ID_L, Rec_ID_H, Rec_ID_L]   // 2-byte sender and receiver IDs
+[0xE0 / 0xE1 / 0xE2]                        // Message type (start, response, final)
+[0x06 to 0x01]                              // Pos (x,y,z) & Vel (x,y,z) – 6 bytes
+[8 bytes]                                   // Timestamps
+[2 bytes]                                   // Final chip-related bytes
+*/
+static uint8_t const_receive_msg[] = { 0x41, 0x88, 0, 0xCA, 0xDE, 0x00, Bot_ID };
+// static uint8_t tx_resp_msg[] = { 0x41, 0x88, 0, 0xCA, 0xDE, rec_Bot_ID, rec_Bot_ID, Bot_ID, Bot_ID, 0xE1, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+void generate_msg(uint8_t *tx_msg,
+                  uint8_t frame_seq_nb,
+                  uint16_t sender_id,
+                  uint16_t receiver_id,
+                  int8_t position[3],
+                  int8_t velocity[3],
+                  uint8_t message_type,
+                  uint8_t *timestamps)  // can be NULL
+{
+  tx_msg[0] = 0x41;
+  tx_msg[1] = 0x88;
+  tx_msg[2] = frame_seq_nb;
+  tx_msg[3] = 0xCA;
+  tx_msg[4] = 0xDE;
+
+  tx_msg[5] = (sender_id >> 8) & 0xFF;  // sender_id high byte
+  tx_msg[6] = sender_id & 0xFF;         // sender_id low byte
+
+  tx_msg[7] = (receiver_id >> 8) & 0xFF;  // receiver_id high byte
+  tx_msg[8] = receiver_id & 0xFF;         // receiver_id low byte
+
+  tx_msg[9] = position[0];
+  tx_msg[10] = position[1];
+  tx_msg[11] = position[2];
+
+  tx_msg[12] = velocity[0];
+  tx_msg[13] = velocity[1];
+  tx_msg[14] = velocity[2];
+
+  tx_msg[15] = message_type;
+
+  // Default timestamps to 0
+  tx_msg[16] = 0x00;
+  tx_msg[17] = 0x00;
+
+  // Total: 18 bytes — you can extend this if you're using all 8 timestamps/chip bytes
+}
 
 // void printDistBuffer(uint8_t* buffer, uint16_t length, double distance) {
 //   // Decode Bot IDs (assumed positions: sender ID = [5,6], receiver ID = [7,8])

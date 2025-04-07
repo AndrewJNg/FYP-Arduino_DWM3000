@@ -2,10 +2,24 @@
 #include "dw3000.h"
 #include "SPI.h"
 
+extern SPISettings _fastSPI;
 
+// #define PIN_RST 33
+// #define PIN_IRQ 40  // Pin IRQ is useless for now, set to arbitary pin to not cause conflict
+// #define PIN_SS 32
+
+
+// Default settings
 #define PIN_RST 27
 #define PIN_IRQ 34
 #define PIN_SS 4
+
+/*
+// If we resolder new boards with DRV8333 motor driver
+#define PIN_RST 15
+#define PIN_IRQ 13 
+#define PIN_SS 5
+*/
 
 #define RNG_DELAY_MS 1000
 #define TX_ANT_DLY 16385
@@ -52,17 +66,42 @@ static dwt_config_t config = {
 void UWB_setup() {
   UART_init();
 
+  // 1. HARD RESET
+  pinMode(PIN_RST, OUTPUT);
+  digitalWrite(PIN_RST, LOW);
+  delay(10);  // hold in reset
+  digitalWrite(PIN_RST, HIGH);
+  delay(10);  // let chip wake
+
+  // delay(3000);  // Time needed for DW3000 to start up (transition from INIT_RC to IDLE_RC, or could wait for SPIRDY event)
+  // 2. BEGIN SPI
+  _fastSPI = SPISettings(8000000L, MSBFIRST, SPI_MODE0);
   spiBegin(PIN_IRQ, PIN_RST);
   spiSelect(PIN_SS);
+  delay(2);  // short delay
 
+  // dwt_softreset();
+  //  _fastSPI = SPISettings(16000000L, MSBFIRST, SPI_MODE0);
+
+  // 3. SOFTWARE RESET (optional but good)
+  dwt_softreset();
   delay(2);  // Time needed for DW3000 to start up (transition from INIT_RC to IDLE_RC, or could wait for SPIRDY event)
 
-  while (!dwt_checkidlerc())  // Need to make sure DW IC is in IDLE_RC before proceeding
+  // while (!dwt_checkidlerc())  // Need to make sure DW IC is in IDLE_RC before proceeding
+  // {
+  //   UART_puts("IDLE FAILED\r\n");
+  //   while (1)
+  //     ;
+  // }
+
+  do  // Need to make sure DW IC is in IDLE_RC before proceeding
   {
     UART_puts("IDLE FAILED\r\n");
-    while (1)
-      ;
-  }
+    // while (1)
+    // ;
+    dwt_softreset();
+    delay(500);  // Time needed for DW3000 to start up (transition from INIT_RC to IDLE_RC, or could wait for SPIRDY event)
+  } while (!dwt_checkidlerc() || dwt_initialise(DWT_DW_INIT) == DWT_ERROR);
 
   if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR) {
     UART_puts("INIT FAILED\r\n");
@@ -101,7 +140,7 @@ void UWB_setup() {
   Serial.println("Setup over........");
 }
 
-void printRxBuffer(uint8_t* buffer, uint16_t length) {
+void printRxBuffer(uint8_t *buffer, uint16_t length) {
   Serial.print("Received data: ");
   for (uint16_t i = 0; i < length; i++) {
     if (buffer[i] < 0x10) Serial.print("0");  // Pad single-digit hex with zero
@@ -111,3 +150,67 @@ void printRxBuffer(uint8_t* buffer, uint16_t length) {
   Serial.println();
 }
 
+//////////////////////////////////////////////////////////////////////////////////////
+// Function to generate new UWB messages to be sent over
+/*
+[0x41, 0x88, 0x00, 0xCA, 0xDE]             // Fixed header (5 bytes)
+[Bot_ID_H, Bot_ID_L, Rec_ID_H, Rec_ID_L]   // 2-byte sender and receiver IDs
+[0xE0 / 0xE1 / 0xE2]                        // Message type (start, response, final)
+[0x06 to 0x01]                              // Pos (x,y,z) & Vel (x,y,z) – 6 bytes
+[8 bytes]                                   // Timestamps
+[2 bytes]                                   // Final chip-related bytes
+*/
+static uint8_t const_receive_msg[] = { 0x41, 0x88, 0, 0xCA, 0xDE, 0x00, Bot_ID };
+// static uint8_t tx_resp_msg[] = { 0x41, 0x88, 0, 0xCA, 0xDE, rec_Bot_ID, rec_Bot_ID, Bot_ID, Bot_ID, 0xE1, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+void generate_msg(uint8_t *tx_msg,
+                  uint8_t frame_seq_nb,
+                  uint16_t sender_id,
+                  uint16_t receiver_id,
+                  int8_t position[3],
+                  int8_t velocity[3],
+                  uint8_t message_type,
+                  uint8_t *timestamps)  // can be NULL
+{
+  tx_msg[0] = 0x41;
+  tx_msg[1] = 0x88;
+  tx_msg[2] = frame_seq_nb;
+  tx_msg[3] = 0xCA;
+  tx_msg[4] = 0xDE;
+
+  tx_msg[5] = (sender_id >> 8) & 0xFF;  // sender_id high byte
+  tx_msg[6] = sender_id & 0xFF;         // sender_id low byte
+
+  tx_msg[7] = (receiver_id >> 8) & 0xFF;  // receiver_id high byte
+  tx_msg[8] = receiver_id & 0xFF;         // receiver_id low byte
+
+  tx_msg[9] = position[0];
+  tx_msg[10] = position[1];
+  tx_msg[11] = position[2];
+
+  tx_msg[12] = velocity[0];
+  tx_msg[13] = velocity[1];
+  tx_msg[14] = velocity[2];
+
+  tx_msg[15] = message_type;
+
+  // Default timestamps to 0
+  tx_msg[16] = 0x00;
+  tx_msg[17] = 0x00;
+
+  // Total: 18 bytes — you can extend this if you're using all 8 timestamps/chip bytes
+}
+
+// void printDistBuffer(uint8_t* buffer, uint16_t length, double distance) {
+//   // Decode Bot IDs (assumed positions: sender ID = [5,6], receiver ID = [7,8])
+//   char sender_id[3] = { (char)buffer[5], (char)buffer[6], '\0' };
+//   char receiver_id[3] = { (char)buffer[7], (char)buffer[8], '\0' };
+
+//   Serial.print("\tSender ID: ");
+//   Serial.print(sender_id);
+//   Serial.print("\tReceiver ID: ");
+//   Serial.print(receiver_id);
+//   Serial.print("\tDist: ");
+//   Serial.println(distance);
+
+// }
