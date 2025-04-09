@@ -3,12 +3,12 @@ fclose all; close all; clear all; clc;% Load data with original column names
 global global_noise_factor;
 global global_noise_range;
 
-global_noise_range = 0.01;
+global_noise_range = 0.1;
 global_noise_factor = 0.0;
 
 
 % Initial positions of robots
-robot_start_positions = [-3 -2; 2 -2; -2 2; 2 2]
+robot_start_positions = [-2 -2; 2 -2; -2 2; 2 2]
 % robot_start_positions = [0 0; 5 0; 3 3; 0 5]
 %       ; 2 2; 5 1; 0 2; 4 2];  % Each row is [x, y] for one robot 
 
@@ -46,17 +46,17 @@ robot_id = 3;
 dx = 5; 
 dy = 5;
 
-[actual_positions,estimated_positions] = move_to_target(actual_positions,estimated_positions, 1, -1, -1, 0.1);
-[actual_positions,estimated_positions] = move_to_target(actual_positions,estimated_positions, 2, 1, -1, 0.1);
-[actual_positions,estimated_positions] = move_to_target(actual_positions,estimated_positions, 3, -1, 1, 0.1);
-[actual_positions,estimated_positions] = move_to_target(actual_positions,estimated_positions, 4, 1, 1, 0.1);
+estimated_positions = move_to_target(estimated_positions, 1, -1, -1, 0.5);
+estimated_positions = move_to_target(estimated_positions, 2, 1, -1, 0.5);
+estimated_positions = move_to_target(estimated_positions, 3, -1, 1, 0.5);
+estimated_positions = move_to_target(estimated_positions, 4, 1, 1, 0.5);
 
-% for i = 1:10
-%     estimated_positions = move_to_target(actual_positions,estimated_positions, 1, -1, -1, 0.1);
-%     estimated_positions = move_to_target(actual_positions,estimated_positions, 2, 1, -1, 0.1);
-%     estimated_positions = move_to_target(actual_positions,estimated_positions, 3, -1, 1, 0.1);
-%     estimated_positions = move_to_target(actual_positions,estimated_positions, 4, 1, 1, 0.1);
-% end
+for i = 1:100
+    estimated_positions = move_to_target(estimated_positions, 1, -1, -1, 0.5);
+    estimated_positions = move_to_target(estimated_positions, 2, 1, -1, 0.5);
+    estimated_positions = move_to_target(estimated_positions, 3, -1, 1, 0.5);
+    estimated_positions = move_to_target(estimated_positions, 4, 1, 1, 0.5);
+end
 
 
 %     % Obtain position from sensor after other robots moved 
@@ -100,8 +100,7 @@ dy = 5;
 
 
 %% Final position plotting
-% positions = actual_positions;
-positions = estimated_positions;
+positions = actual_positions;
 for i = 1:size(positions, 1)
     plot(positions(i,1), positions(i,2), 'ro', 'MarkerSize', 10, 'LineWidth', 2);
 end
@@ -109,10 +108,10 @@ end
 
 
 %%
-function [actual_positions,robot_positions] = move_to_target(actual_positions,robot_positions, robot_id, target_x, target_y, step_size)
+function robot_positions = move_to_target(robot_positions, robot_id, target_x, target_y, step_size)
     % Step 1: Estimate current position using trilateration
-    distances = computeDistances(actual_positions);
-    neighbor_data = getNeighborData(actual_positions, distances, robot_id); 
+    distances = computeDistances(robot_positions);
+    neighbor_data = getNeighborData(robot_positions, distances, robot_id); 
     [x_est, y_est] = Trilateration_2D(neighbor_data);
     robot_positions(robot_id, :) = [x_est, y_est];  % Update estimated position
     
@@ -130,7 +129,7 @@ function [actual_positions,robot_positions] = move_to_target(actual_positions,ro
     
     % Step 5: Interpolated movement
     for i = 1:steps
-        actual_positions = calculated_move(actual_positions, robot_id, dx_step, dy_step);
+        robot_positions = calculated_move(robot_positions, robot_id, dx_step, dy_step);
     end
 
     % Step 6: Final position update using trilateration
@@ -140,7 +139,7 @@ function [actual_positions,robot_positions] = move_to_target(actual_positions,ro
     robot_positions(robot_id, :) = [x_est, y_est];
     
     % Optional: plot after movement
-    plotRobotsAfter(actual_positions);
+    plotRobotsAfter(robot_positions);
 end
 
 function robot_positions = calculated_move(robot_positions, robot_id, dx,dy)
@@ -152,6 +151,42 @@ function robot_positions = calculated_move(robot_positions, robot_id, dx,dy)
     plotRobotsAfter(robot_positions);
 end
 
+
+function robot_positions = calculated_move_displacement(robot_positions, robot_ids, x, y, speed)
+    % robot_positions: Current positions of robots (n x 2 matrix)
+    % robot_ids:       Array of robot ids to be moved
+    % x, y:            The target position to move towards
+    % dx, dy:          The total displacement (dx, dy)
+    
+    % Calculate the displacement vector from current position to target position
+    displacement = [x, y];  % Target displacement for robot
+    
+    % Calculate the total distance to move using Pythagoras' theorem
+    total_distance = norm(displacement);  % Total distance between current and target
+    
+    % Calculate the number of sub-steps needed
+    % Each step will cover a small portion of the total displacement
+    steps = 5;  % Number of steps (you can adjust this for finer control)
+    if total_distance < 0.001  % If the displacement is very small, set to 1 step
+        steps = 1;
+    end
+    
+    % Calculate incremental movement per sub-step
+    % The distance moved in each step
+    dx_step = speed / steps;  % Incremental dx per step
+    dy_step = speed / steps;  % Incremental dy per step
+    
+    % For each robot, move according to the steps
+    for i = 1:length(robot_ids)
+        robot_id = robot_ids(i);
+        
+        % Interpolate robot's position over each sub-step
+        for j = 1:steps
+            % Incremental movement for the robot
+            robot_positions = calculated_move(robot_positions, robot_id, dx_step, dy_step);
+        end
+    end
+end
 
 
 
