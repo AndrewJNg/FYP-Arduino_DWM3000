@@ -34,7 +34,8 @@ actual_positions = robot_start_positions;
 
 %% Movement
 % Movement of robots one step at a time
-for i = 1:100
+% distances = computeDistances(actual_positions)
+for i = 1:50
     actual_positions = move_robot_step(actual_positions, 1, -1, -1);
     actual_positions = move_robot_step(actual_positions, 2, 1, -1);
     actual_positions = move_robot_step(actual_positions, 3, -1, 1);
@@ -89,31 +90,35 @@ function [x_est, y_est] = getEstimatedPosition(actual_positions, robot_id)
     % distances:       n x n matrix (distance from i to j)
     % robot_id:        index of the current robot (1 to n)
 
+
+    distances = computeDistances(actual_positions);
+    
+    [x_est, y_est] = Trilateration_2D(actual_positions, distances,robot_id);
+end
+
+
+
+%% Function for trilateration
+function [x, y] = Trilateration_2D(actual_positions, distances,robot_id)
+
     n = size(actual_positions, 1);
     
     if robot_id > n || robot_id < 1
         error('robot_id is out of bounds.');
     end
-
-    distances = computeDistances(actual_positions);
-    
     % Exclude the current robot
     idx = setdiff(1:n, robot_id);
     
     % Get neighbor positions and distances
     neighbor_positions = actual_positions(idx, :);
     neighbor_distances = distances(robot_id, idx)';
+
+    x_prev = actual_positions(robot_id, 1);
+    y_prev = actual_positions(robot_id, 2);
     
     % Combine into [x, y, d] format
     data = [neighbor_positions, neighbor_distances];
 
-    [x_est, y_est] = Trilateration_2D(data);
-end
-
-
-
-%% Function for trilateration
-function [x, y] = Trilateration_2D(data)
     n = size(data, 1);
     
     if n < 2
@@ -124,20 +129,40 @@ function [x, y] = Trilateration_2D(data)
         [x2, y2, d2] = deal(data(2,1), data(2,2), data(2,3));
         
         D = sqrt((x2 - x1)^2 + (y2 - y1)^2);
-
+        
         if D > d1 + d2 || D < abs(d1 - d2) || D == 0
             error('No solution: the circles do not intersect or are coincident.');
         end
-
+        
+        % Intersection points
         a = (d1^2 - d2^2 + D^2) / (2 * D);
         px = x1 + a * (x2 - x1) / D;
         py = y1 + a * (y2 - y1) / D;
         h = sqrt(d1^2 - a^2);
         rx = -(y2 - y1) * (h / D);
         ry =  (x2 - x1) * (h / D);
-
-        x = px + rx;  % First possible solution
-        y = py + ry;
+        
+        % Two possible solutions
+        xA = px + rx;
+        yA = py + ry;
+        xB = px - rx;
+        yB = py - ry;
+        
+        % Choose the closer one to the previous position
+        distA = hypot(xA - x_prev, yA - y_prev);
+        distB = hypot(xB - x_prev, yB - y_prev);
+        
+        if distA < distB
+            x = xA;
+            y = yA;
+        else
+            x = xB;
+            y = yB;
+        end
+        
+        % Save current position
+        x_prev = x;
+        y_prev = y;
         
     else
         % Least-squares trilateration for 3+ references
