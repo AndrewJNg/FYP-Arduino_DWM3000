@@ -322,6 +322,21 @@ double Tag_process_received_message(uint16_t sender_id, uint16_t receiver_id) {
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+uint32_t status_reg_anchor = 0;
+
+// void Anchor_poll_for_response(uint16_t sender_id) {
+//   // Set as Anchor and to activate reception immediately (no timeout).
+//   dwt_setrxtimeout(0);
+//   dwt_rxenable(DWT_START_RX_IMMEDIATE);
+
+//   status_reg_anchor = dwt_read32bitreg(SYS_STATUS_ID);
+
+//   if (status_reg_anchor & SYS_STATUS_RXFCG_BIT_MASK) {
+//     Anchor_process_received_message(sender_id);
+//   } else if (status_reg_anchor & SYS_STATUS_ALL_RX_ERR) {
+//     dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR); // Clear error flags
+//   }
+// }
 
 void Anchor_waiting_for_response(uint16_t sender_id) {
   // Set as Anchor and to activate reception immediately (no timeout).
