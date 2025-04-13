@@ -14,7 +14,7 @@ void loop() {
 
   double distance_received = get_UWB_Distance(Bot_ID, rec_Bot_ID);
   Serial.print("DIST: \t");
-  Serial.println(distance_received);
+  Serial.print(distance_received);
 
   if (distance_received != -1) {
     Serial.print("\t DIST filtered: ");
