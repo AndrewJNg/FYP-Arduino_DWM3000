@@ -128,3 +128,27 @@ int Trilateration_2D(Position actual_positions[], double distances[][MAX_ROBOTS]
 //     return 0;
 // }
 
+/*
+r = wheel radius
+L = half of robot length
+W = half of robot wdith
+delta_phi[1-4] = wheel displacement (radians or distance)
+dt = time stamp 
+dx,dy,dtheta = pose chane in robot frame
+*/
+
+void updateMecanumOdometry(double delta_phi[4], double L, double W,
+    double* x_mm, double* y_mm, double* theta_rad) {
+
+    // Robot-centric velocities (already in mm/s)
+    double vx_r = (1.0 / 4.0) * (delta_phi[0] + delta_phi[1] + delta_phi[2] + delta_phi[3]);
+    double vy_r = (1.0 / 4.0) * (-delta_phi[0] + delta_phi[1] + delta_phi[2] - delta_phi[3]);
+    double omega = (1.0 / (4.0 * (L + W))) * (-delta_phi[0] + delta_phi[1] - delta_phi[2] + delta_phi[3]);  // rad/s
+
+    double vx = vx_r * cos(*theta_rad) - vy_r * sin(*theta_rad);
+    double vy = vx_r * sin(*theta_rad) + vy_r * cos(*theta_rad);
+
+    *x_mm += vx;
+    *y_mm += vy;
+    *theta_rad += omega;
+}

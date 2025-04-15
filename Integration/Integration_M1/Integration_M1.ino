@@ -31,6 +31,17 @@ unsigned long previousMillis = 0;
 const unsigned long interval = 500; // milliseconds
 
 void loop() {
+//     double delta_phi[4] = {-377, 377, -377, 377};  // distance in mm moved by each wheel
+//     double L = 60.0;  // in mm
+//     double W = 60.0;  // in mm
+
+//     double x = 0.0, y = 0.0, theta = 0.0;  // Pose in mm and radians
+
+    // updateMecanumOdometry(delta_phi, L, W, &x, &y, &theta);
+
+    // printf("x = %.6f mm\ny = %.6f mm\ntheta = %.6f degree\n", x, y, theta*180/3.142);
+
+
   notify();
     // Serial.print(stick_LX);
     // Serial.print("  ");
@@ -47,17 +58,18 @@ void loop() {
     previousMillis = currentMillis;
 
     Serial.print("DIST A: \t");
-    Serial.print(get_UWB_Distance(Bot_ID, 0xAA));
+    Serial.print(get_UWB_Distance(Bot_ID, 0xAA)); //2ms
     Serial.print("\tDIST B: \t");
     Serial.print(get_UWB_Distance(Bot_ID, 0xBB));
     
-    //     Position positions[4] = {{-5, -2}, {2, -2}, {-2, 2}, {2, 2}};
-    // double distances[4][MAX_ROBOTS] = {
-    //     {0 ,   7.0000 ,   5.0000 ,   8.0623},
-    //     {7.0000,         0,    5.6569 ,   4.0000},
-    //     {5.0000 ,   5.6569,         0,    4.0000},
-    //     {8.0623,    4.0000,    4.0000 ,        0}
-    // };
+        Position positions[4] = {{0, 0}, {0, 2}, {-2, 2}, {2, 2}};
+    double distances[4][MAX_ROBOTS] = {
+        {0 ,   7.0000 ,   5.0000 ,   8.0623},
+        {7.0000,         0,    5.6569 ,   4.0000},
+        {5.0000 ,   5.6569,         0,    4.0000},
+        {8.0623,    4.0000,    4.0000 ,        0}
+    };
+    
 
     // double x, y;
     // int status = Trilateration_2D(positions, distances, 4, 0, &x, &y);

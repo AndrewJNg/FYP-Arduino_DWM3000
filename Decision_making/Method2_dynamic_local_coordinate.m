@@ -3,12 +3,13 @@ fclose all; close all; clear all; clc;% Load data with original column names
 global global_noise_factor;
 global global_noise_range;
 
-global_noise_range = 0.1;
-global_noise_factor = 0.1;
+global_noise_range = 0.0;
+global_noise_factor = 0.0;
 
 
 % Initial positions of robots
-robot_start_positions = [-5 -2; 2 -2; -2 2; 2 2]
+robot_start_positions = [0 0; 2 0; 2 2]
+% robot_start_positions = [-5 -2; 2 -2; -2 2; 2 2]
 % robot_start_positions = [-5 -2; 2 -2; -2 2]
 % robot_start_positions = [0 0; 5 0; 3 3; 0 5]
 %       ; 2 2; 5 1; 0 2; 4 2];  % Each row is [x, y] for one robot 
@@ -35,11 +36,20 @@ actual_positions = robot_start_positions;
 %% Movement
 % Movement of robots one step at a time
 % distances = computeDistances(actual_positions)
+% for i = 1:50
+%     actual_positions = move_robot_step(actual_positions, 1, -1, -1);
+%     actual_positions = move_robot_step(actual_positions, 2, 1, -1);
+%     actual_positions = move_robot_step(actual_positions, 3, -1, 1);
+%     actual_positions = move_robot_step(actual_positions, 4, 1, 1);
+%     
+%     plotRobotsAfter(actual_positions);
+% 
+% end
 for i = 1:50
-    actual_positions = move_robot_step(actual_positions, 1, -1, -1);
-    actual_positions = move_robot_step(actual_positions, 2, 1, -1);
-    actual_positions = move_robot_step(actual_positions, 3, -1, 1);
-    actual_positions = move_robot_step(actual_positions, 4, 1, 1);
+%     actual_positions = move_robot_step(actual_positions, 1, -1, -1);
+%     actual_positions = move_robot_step(actual_positions, 2, 1, -1);
+    actual_positions = move_robot_step(actual_positions, 3, 1, 1);
+%     actual_positions = move_robot_step(actual_positions, 4, 1, 1);
     
     plotRobotsAfter(actual_positions);
 
@@ -91,7 +101,7 @@ function [x_est, y_est] = getEstimatedPosition(actual_positions, robot_id)
     % robot_id:        index of the current robot (1 to n)
 
 
-    distances = computeDistances(actual_positions);
+    distances = computeDistances(actual_positions)
     
     [x_est, y_est] = Trilateration_2D(actual_positions, distances,robot_id);
 end
