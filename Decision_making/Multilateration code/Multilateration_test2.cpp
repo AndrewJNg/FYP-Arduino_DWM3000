@@ -118,17 +118,25 @@ int Trilateration_2D(Robot robots[], int n, int target_id, double* out_x, double
 }
 
 int main() {
-    Robot robots[4] = {
-        {.bot_id = 0xAA, .x = 2, .y = -2, .theta = 0, .last_sent_time = 0, .distances = 0},
-        {.bot_id = 0xBB, .x = 2, .y = -2, .theta = 0, .last_sent_time = 0, .distances = 7.0000},
-        {.bot_id = 0xCC, .x = -2, .y = 2, .theta = 0, .last_sent_time = 0, .distances = 5.0000},
-        {.bot_id = 0xDD, .x = 2, .y =  2, .theta = 0, .last_sent_time = 0, .distances = 8.0623}
+    
+    double dist_2_A = 1.02; //takes around 2ms to obtain information
+    double dist_2_B = 0.2;
+
+    Robot robots[3] = {
+        {.bot_id = 0xAA, .x = 0, .y = 0, .theta = 0, .last_sent_time = 0, .distances =  dist_2_A},
+        {.bot_id = 0xBB, .x = 2, .y = 0, .theta = 0, .last_sent_time = 0, .distances =  dist_2_B},
+        {.bot_id = 0xCC, .x = 2, .y = 2, .theta = 0, .last_sent_time = 0, .distances = 0.0000},
+
+        // {.bot_id = 0xAA, .x = 2, .y = -2, .theta = 0, .last_sent_time = 0, .distances = 0},
+        // {.bot_id = 0xBB, .x = 2, .y = -2, .theta = 0, .last_sent_time = 0, .distances = 7.0000},
+        // {.bot_id = 0xCC, .x = -2, .y = 2, .theta = 0, .last_sent_time = 0, .distances = 5.0000},
+        // {.bot_id = 0xDD, .x = 2, .y =  2, .theta = 0, .last_sent_time = 0, .distances = 8.0623}
     };
 
     
 
     double x, y;
-    int status = Trilateration_2D(robots, 4, 0xAA, &x, &y);
+    int status = Trilateration_2D(robots, 4, 0xCC, &x, &y);
     if (status == 0) {
         printf("Estimated position: (%.2f, %.2f)\n", x, y);
     } else {
