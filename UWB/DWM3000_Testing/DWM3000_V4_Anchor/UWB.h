@@ -12,7 +12,7 @@ double Tag_process_received_message(uint16_t sender_id, uint16_t receiver_id);
 void Anchor_waiting_for_response(uint16_t sender_id);
 void Anchor_process_received_message(uint16_t sender_id);
 
-void setTransmitData(int length, uint8_t* buffer, int ranging, int fcs);
+void setTransmitData(int length, uint8_t *buffer, int ranging, int fcs);
 int startTransmit(bool delayed, bool wait4resp);
 
 // #define PIN_RST 33
@@ -53,11 +53,10 @@ static uint8_t rx_buffer[26];
 static uint32_t status_reg = 0;
 
 // extern dwt_txconfig_t txconfig_options;
-dwt_txconfig_t txconfig_options2 =
-{
-    0x34,           /* PG delay. */
-    0xffffffff,      /* TX power. */
-    0x0             /*PG count*/
+dwt_txconfig_t txconfig_options2 = {
+  0x34,       /* PG delay. */
+  0xffffffff, /* TX power. */
+  0x0         /*PG count*/
 };
 
 
@@ -230,7 +229,7 @@ double get_UWB_Distance(uint16_t sender_id, uint16_t receiver_id) {
   return distance;
 }
 
-void setTransmitData(int length, uint8_t* buffer, int ranging, int fcs) {
+void setTransmitData(int length, uint8_t *buffer, int ranging, int fcs) {
   // Write data to TX buffer
   dwt_writetxdata(length, buffer, 0);
 
@@ -254,10 +253,12 @@ int startTransmit(bool delayed, bool wait4resp) {
 
 
 
+
 // Step 1: Tag Sends Initial Message (Poll)
 void Tag_set_send_mode(uint16_t sender_id, uint16_t receiver_id) {
   // Set the receive timeout for the response message in microseconds.
   dwt_setrxtimeout(RESP_RX_TIMEOUT_UUS);
+  dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);  // Clear TX frame sent event bit in status register
 
   // Prepare message to be sent out
   uint8_t tx_msg[18];
@@ -265,10 +266,8 @@ void Tag_set_send_mode(uint16_t sender_id, uint16_t receiver_id) {
   int8_t vel[3] = { 4, 5, 6 };
   generate_msg(tx_msg, frame_seq_nb, receiver_id, sender_id, pos, vel, 0xE0, NULL);
 
-  // Clear TX frame sent event bit in status register
-  dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
-  setTransmitData(sizeof(tx_msg), tx_msg, 1, 1);    // ranging = 1, fcs = 1
-  startTransmit(false, true);                       // immediate TX, expect response
+  setTransmitData(sizeof(tx_msg), tx_msg, 1, 1);  // ranging = 1, fcs = 1
+  startTransmit(false, true);                     // immediate TX, expect response
 }
 
 // // Step 2: Tag Waits for Response and Computes Distance
@@ -373,47 +372,116 @@ void Anchor_process_received_message(uint16_t sender_id) {
 
     // Check if the received message matches the expected format.
     if (memcmp(rx_buffer, const_receive_msg, ALL_MSG_COMMON_LEN + 2) == 0) {
-      uint32_t resp_tx_time;
-      int ret;
-      static uint64_t T_reply_start, T_reply_end;
 
-      // Retrieve poll reception timestamp.
-      T_reply_start = get_rx_timestamp_u64();
+      if (rx_buffer[15] == 0xE0) {
+        uint32_t resp_tx_time;
+        int ret;
+        static uint64_t T_reply_start, T_reply_end;
 
-      // Compute response transmission time.
-      resp_tx_time = (T_reply_start + (POLL_RX_TO_RESP_TX_DLY_UUS * UUS_TO_DWT_TIME)) >> 8;
-      dwt_setdelayedtrxtime(resp_tx_time);
+        // Retrieve poll reception timestamp.
+        T_reply_start = get_rx_timestamp_u64();
 
-      // Calculate the final response TX timestamp.
-      T_reply_end = (((uint64_t)(resp_tx_time & 0xFFFFFFFEUL)) << 8) + TX_ANT_DLY;
+        // Compute response transmission time.
+        resp_tx_time = (T_reply_start + (POLL_RX_TO_RESP_TX_DLY_UUS * UUS_TO_DWT_TIME)) >> 8;
+        dwt_setdelayedtrxtime(resp_tx_time);
 
-      uint8_t tx_msg[26];
-      int8_t pos[3] = { 6, 5, 4 };
-      int8_t vel[3] = { 3, 2, 1 };
-      generate_msg(tx_msg, frame_seq_nb, receiver_id, sender_id, pos, vel, 0xE1, NULL);
+        // Calculate the final response TX timestamp.
+        T_reply_end = (((uint64_t)(resp_tx_time & 0xFFFFFFFEUL)) << 8) + TX_ANT_DLY;
 
-      // Store timestamps in the response message.
-      resp_msg_set_ts(&tx_msg[RESP_MSG_POLL_RX_TS_IDX], T_reply_start);
-      resp_msg_set_ts(&tx_msg[RESP_MSG_RESP_TX_TS_IDX], T_reply_end);
+        uint8_t tx_msg[26];
+        int8_t pos[3] = { 6, 5, 4 };
+        int8_t vel[3] = { 3, 2, 1 };
+        generate_msg(tx_msg, frame_seq_nb, receiver_id, sender_id, pos, vel, 0xE1, NULL);
 
-      // Prepare and send the response message
-      setTransmitData(sizeof(tx_msg), tx_msg, 1, 1);      // ranging = 1, fcs = 1
-      startTransmit(true, false);                   // delayed TX, no response expected
-      // ret = startTransmit(true, false);                   // delayed TX, no response expected
-      
+        // Store timestamps in the response message.
+        resp_msg_set_ts(&tx_msg[RESP_MSG_POLL_RX_TS_IDX], T_reply_end - T_reply_start);
+        // resp_msg_set_ts(&tx_msg[RESP_MSG_RESP_TX_TS_IDX], T_reply_end);
 
-      // // If transmission is successful, wait for TX event and clear it.
-      // if (ret == DWT_SUCCESS) {
-      //   while (!(dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS_BIT_MASK)) {
-      //   }
-      //   dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
+        // Prepare and send the response message
+        setTransmitData(sizeof(tx_msg), tx_msg, 1, 1);  // ranging = 1, fcs = 1
+        // startTransmit(true, false);                     // delayed TX, no response expected
 
-      //   // Increment frame sequence number for next message.
-      //   frame_seq_nb++;
-      // }
+        startTransmit(true, true);  // delayed TX, no response expected
+
+        // // Wait for TX confirmation
+        // while (!(dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS_BIT_MASK)) {
+        //   // Optional timeout mechanism to avoid infinite loop
+        // }
+
+        // // Clear the TXFRS flag
+        // dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
+
+        // // Re-enable receiver
+        // dwt_rxenable(DWT_START_RX_IMMEDIATE);
+
+      } else if (rx_buffer[15] == 0xE2) {  // Check for Final message type
+
+        static double distance = 0;
+        uint32_t frame_len;
+        uint32_t T_poll_start, T_poll_end, T_reply_start, T_reply_end;
+        uint32_t T_reply,T_round;
+
+        float clockOffsetRatio;
+        static double tof;
+
+        T_poll_start = dwt_readtxtimestamplo32();
+        T_poll_end = dwt_readrxtimestamplo32();
+        clockOffsetRatio = ((float)dwt_readclockoffset()) / (uint32_t)(1 << 26);
+
+        // resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &T_reply_start);
+        // resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &T_reply_end);
+        resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &T_reply);
+        resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &T_round);
+
+        // T_round = T_poll_end - T_poll_start;
+        // T_reply = T_reply_end - T_reply_start;
+        tof = ((T_round - T_reply * (1-clockOffsetRatio)) / 2.0) * DWT_TIME_UNITS;
+        distance = tof * SPEED_OF_LIGHT;
+        
+      snprintf(dist_str, sizeof(dist_str), "DIST: %3.2f m", distance);
+      test_run_info((unsigned char *)dist_str);
+        // Serial.println("Second message sent");
+
+        // Serial.println("Final message received");
+
+        // Optional: extract and interpret Final message payload
+        // uint64_t final_ts_data = 0;
+        // memcpy(&final_ts_data, &rx_buffer[ALL_MSG_COMMON_LEN + 3], sizeof(uint64_t));
+
+        // uint32_t T_poll_start = (uint32_t)(final_ts_data & 0xFFFFFFFFUL);
+        // uint32_t T_reply_end = (uint32_t)(final_ts_data >> 32);
+
+        // Serial.print("T_poll_start: ");
+        // Serial.println(T_poll_start);
+        // Serial.print("T_reply_end: ");
+        // Serial.println(T_reply_end);
+
+
+        // startTransmit(true, true);  // delayed TX, response expected
+
+        // while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR))) {
+        // };
+
+        // if (status_reg & SYS_STATUS_RXFCG_BIT_MASK) {
+        //   dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
+        //   // Read the received frame into the local buffer.
+        //   frame_len = dwt_read32bitreg(RX_FINFO_ID) & RXFLEN_MASK;
+        //   if (frame_len <= sizeof(rx_buffer)) {
+        //     dwt_readrxdata(rx_buffer, frame_len, 0);
+
+        //     rx_buffer[ALL_MSG_SN_IDX] = 0;  // Clear sequence number for validation
+        //     if (memcmp(rx_buffer, const_receive_msg, ALL_MSG_COMMON_LEN + 2) == 0) {
+        //     }
+        //     // distance = Tag_process_received_message(sender_id, receiver_id);
+        //     // return distance;
+        //   }
+        // } else {
+        //   dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
+        //   // return -1;
+        // }
+      }
     } else Serial.println("Ignored");
   }
 
   printRxBuffer(rx_buffer, frame_len);
 }
-

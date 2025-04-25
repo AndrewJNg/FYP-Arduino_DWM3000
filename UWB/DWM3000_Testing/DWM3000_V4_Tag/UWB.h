@@ -258,6 +258,7 @@ int startTransmit(bool delayed, bool wait4resp) {
 void Tag_set_send_mode(uint16_t sender_id, uint16_t receiver_id) {
   // Set the receive timeout for the response message in microseconds.
   dwt_setrxtimeout(RESP_RX_TIMEOUT_UUS);
+  dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK); // Clear TX frame sent event bit in status register
 
   // Prepare message to be sent out
   uint8_t tx_msg[18];
@@ -265,8 +266,6 @@ void Tag_set_send_mode(uint16_t sender_id, uint16_t receiver_id) {
   int8_t vel[3] = { 4, 5, 6 };
   generate_msg(tx_msg, frame_seq_nb, receiver_id, sender_id, pos, vel, 0xE0, NULL);
 
-  // Clear TX frame sent event bit in status register
-  dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
   setTransmitData(sizeof(tx_msg), tx_msg, 1, 1);    // ranging = 1, fcs = 1
   startTransmit(false, true);                       // immediate TX, expect response
 }
@@ -293,7 +292,9 @@ double Tag_process_received_message(uint16_t sender_id, uint16_t receiver_id) {
   static double distance = 0;
   uint32_t frame_len;
   uint32_t T_poll_start, T_poll_end, T_reply_start, T_reply_end;
-  int32_t T_round, T_reply;
+  int32_t T_round;
+  uint32_t T_reply;
+
   float clockOffsetRatio;
   static double tof;
 
@@ -307,23 +308,59 @@ double Tag_process_received_message(uint16_t sender_id, uint16_t receiver_id) {
   frame_len = dwt_read32bitreg(RX_FINFO_ID) & RXFLEN_MASK;
   if (frame_len <= sizeof(rx_buffer)) {
     dwt_readrxdata(rx_buffer, frame_len, 0);
-    rx_buffer[ALL_MSG_SN_IDX] = 0;  // Clear sequence number for validation
 
+    rx_buffer[ALL_MSG_SN_IDX] = 0;  // Clear sequence number for validation
     if (memcmp(rx_buffer, const_receive_msg, ALL_MSG_COMMON_LEN + 2) == 0) {  // add 2 for receiver message including bot specific msg
       T_poll_start = dwt_readtxtimestamplo32();
       T_poll_end = dwt_readrxtimestamplo32();
       clockOffsetRatio = ((float)dwt_readclockoffset()) / (uint32_t)(1 << 26);
 
-      resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &T_reply_start);
-      resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &T_reply_end);
+      // resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &T_reply_start);
+      // resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &T_reply_end);
+      resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &T_reply);
+      // resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &T_reply_end);
 
       T_round = T_poll_end - T_poll_start;
-      T_reply = T_reply_end - T_reply_start;
+      // T_reply = T_reply_end - T_reply_start;
       tof = ((T_round - T_reply * (1 - clockOffsetRatio)) / 2.0) * DWT_TIME_UNITS;
       distance = tof * SPEED_OF_LIGHT;
+      
+      ///////////////////////////////////////////////////////
+        uint32_t resp_tx_time;
+        int ret;
+        static uint64_t T_reply_start2, T_reply_end2;
 
+        // Retrieve poll reception timestamp.
+        T_reply_start2 = get_rx_timestamp_u64();
+
+        // Compute response transmission time.
+        resp_tx_time = (T_reply_start2 + (POLL_RX_TO_RESP_TX_DLY_UUS * UUS_TO_DWT_TIME)) >> 8;
+        dwt_setdelayedtrxtime(resp_tx_time);
+        
+        // Calculate the final response TX timestamp.
+        T_reply_end2 = (((uint64_t)(resp_tx_time & 0xFFFFFFFEUL)) << 8) + TX_ANT_DLY;
+
+
+      // Prepare message to be sent out
+      uint8_t tx_msg[26];
+      int8_t pos[3] = { 1, 2, 3 };
+      int8_t vel[3] = { 4, 5, 6 };
+      generate_msg(tx_msg, frame_seq_nb, receiver_id, sender_id, pos, vel, 0xE2, NULL);
+      resp_msg_set_ts(&tx_msg[RESP_MSG_POLL_RX_TS_IDX], T_reply);
+      resp_msg_set_ts(&tx_msg[RESP_MSG_RESP_TX_TS_IDX], T_round);
+      // resp_msg_set_ts(&tx_msg[RESP_MSG_RESP_TX_TS_IDX], T_reply_end2 - T_reply_start2);
+
+      delay(10); 
+      setTransmitData(sizeof(tx_msg), tx_msg, 1, 1);
+      ret = startTransmit(false, false);
+      // Serial.println("Final sent: ");
+      // printRxBuffer(tx_msg, sizeof(tx_msg));
+      // Serial.println(ret);
       // snprintf(dist_str, sizeof(dist_str), "DIST: %3.2f m", distance);
       // test_run_info((unsigned char *)dist_str);
+        // Serial.println("Second message sent");
+
+
     } else {
       Serial.println("Ignored");
       // distance = -1;
@@ -398,18 +435,9 @@ void Anchor_process_received_message(uint16_t sender_id) {
 
       // Prepare and send the response message
       setTransmitData(sizeof(tx_msg), tx_msg, 1, 1);      // ranging = 1, fcs = 1
-      ret = startTransmit(true, false);                   // delayed TX, no response expected
+      startTransmit(true, false);                   // delayed TX, no response expected
+
       
-
-      // If transmission is successful, wait for TX event and clear it.
-      if (ret == DWT_SUCCESS) {
-        while (!(dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS_BIT_MASK)) {
-        }
-        dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
-
-        // Increment frame sequence number for next message.
-        frame_seq_nb++;
-      }
     } else Serial.println("Ignored");
   }
 
