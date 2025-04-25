@@ -29,9 +29,8 @@ void Anchor_process_received_message(uint16_t sender_id);
 #define PIN_SS 5
 */
 
-#define RNG_DELAY_MS 1000
-#define TX_ANT_DLY 16385
-#define RX_ANT_DLY 16385
+#define TX_ANT_DLY 16508
+#define RX_ANT_DLY 16508
 
 #define ALL_MSG_COMMON_LEN 5
 #define ALL_MSG_SN_IDX 2
@@ -47,7 +46,14 @@ static uint8_t frame_seq_nb = 0;
 static uint8_t rx_buffer[26];
 static uint32_t status_reg = 0;
 
-extern dwt_txconfig_t txconfig_options;
+// extern dwt_txconfig_t txconfig_options;
+dwt_txconfig_t txconfig_options2 =
+{
+    0x34,           /* PG delay. */
+    0xffffffff,      /* TX power. */
+    0x0             /*PG count*/
+};
+
 
 // #define CONFIG_OPTION_01
 /* Default communication configuration. We use default non-STS DW mode. */
@@ -129,7 +135,7 @@ void UWB_setup() {
   }
 
   /* Configure the TX spectrum parameters (power, PG delay and PG count) */
-  dwt_configuretxrf(&txconfig_options);
+  dwt_configuretxrf(&txconfig_options2);
 
   /* Apply default antenna delay value. See NOTE 2 below. */
   dwt_setrxantennadelay(RX_ANT_DLY);

@@ -29,9 +29,11 @@ void Anchor_process_received_message(uint16_t sender_id);
 #define PIN_SS 5
 */
 
-#define RNG_DELAY_MS 1000
 #define TX_ANT_DLY 16385
 #define RX_ANT_DLY 16385
+
+// #define TX_ANT_DLY 16385
+// #define RX_ANT_DLY 16385
 
 #define ALL_MSG_COMMON_LEN 5
 #define ALL_MSG_SN_IDX 2
@@ -47,10 +49,18 @@ static uint8_t frame_seq_nb = 0;
 static uint8_t rx_buffer[26];
 static uint32_t status_reg = 0;
 
-extern dwt_txconfig_t txconfig_options;
+// extern dwt_txconfig_t txconfig_options;
+dwt_txconfig_t txconfig_options2 =
+{
+    0x34,           /* PG delay. */
+    0xffffffff,      /* TX power. */
+    0x0             /*PG count*/
+};
+
 
 // #define CONFIG_OPTION_01
 /* Default communication configuration. We use default non-STS DW mode. */
+
 
 //// Working Channel 5 code
 static dwt_config_t config = {
@@ -68,6 +78,7 @@ static dwt_config_t config = {
   DWT_STS_LEN_64,   /* STS length see allowed values in Enum dwt_sts_lengths_e */
   DWT_PDOA_M0       /* PDOA mode off */
 };
+
 
 
 
@@ -129,7 +140,7 @@ void UWB_setup() {
   }
 
   /* Configure the TX spectrum parameters (power, PG delay and PG count) */
-  dwt_configuretxrf(&txconfig_options);
+  dwt_configuretxrf(&txconfig_options2);
 
   /* Apply default antenna delay value. See NOTE 2 below. */
   dwt_setrxantennadelay(RX_ANT_DLY);
@@ -322,21 +333,6 @@ double Tag_process_received_message(uint16_t sender_id, uint16_t receiver_id) {
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-uint32_t status_reg_anchor = 0;
-
-// void Anchor_poll_for_response(uint16_t sender_id) {
-//   // Set as Anchor and to activate reception immediately (no timeout).
-//   dwt_setrxtimeout(0);
-//   dwt_rxenable(DWT_START_RX_IMMEDIATE);
-
-//   status_reg_anchor = dwt_read32bitreg(SYS_STATUS_ID);
-
-//   if (status_reg_anchor & SYS_STATUS_RXFCG_BIT_MASK) {
-//     Anchor_process_received_message(sender_id);
-//   } else if (status_reg_anchor & SYS_STATUS_ALL_RX_ERR) {
-//     dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR); // Clear error flags
-//   }
-// }
 
 void Anchor_waiting_for_response(uint16_t sender_id) {
   // Set as Anchor and to activate reception immediately (no timeout).

@@ -25,7 +25,7 @@ void Anchor_process_received_message(uint16_t sender_id);
 
 // If we resolder new boards with DRV8333 motor driver
 #define PIN_RST 15
-#define PIN_IRQ 13 
+#define PIN_IRQ 13
 #define PIN_SS 5
 
 
@@ -240,8 +240,8 @@ void Tag_set_send_mode(uint16_t sender_id, uint16_t receiver_id) {
 
   // Prepare message to be sent out
   uint8_t tx_msg[18];
-  int8_t pos[3] = { 1, 2, 3 };
-  int8_t vel[3] = { 4, 5, 6 };
+  int8_t pos[3] = { int(x_current*10), int(y_current*10), 0 };
+  int8_t vel[3] = { 0, 0, 0 };
   generate_msg(tx_msg, frame_seq_nb, receiver_id, sender_id, pos, vel, 0xE0, NULL);
 
   ////// Setup to send //////
@@ -403,4 +403,3 @@ void Anchor_process_received_message(uint16_t sender_id) {
 
   // printRxBuffer(rx_buffer, frame_len);
 }
-

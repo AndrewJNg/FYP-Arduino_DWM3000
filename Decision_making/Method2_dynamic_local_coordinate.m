@@ -8,7 +8,7 @@ global_noise_factor = 0.0;
 
 
 % Initial positions of robots
-robot_start_positions = [0 0; 2 0; 2 2]
+robot_start_positions = [0 0; 1.5 0; 1.3 0.1]
 % robot_start_positions = [-5 -2; 2 -2; -2 2; 2 2]
 % robot_start_positions = [-5 -2; 2 -2; -2 2]
 % robot_start_positions = [0 0; 5 0; 3 3; 0 5]
