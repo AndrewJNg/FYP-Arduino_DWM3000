@@ -49,7 +49,7 @@ int startTransmit(bool delayed, bool wait4resp);
 #define RESP_RX_TIMEOUT_UUS 400
 
 static uint8_t frame_seq_nb = 0;
-static uint8_t rx_buffer[26];
+static uint8_t rx_buffer[28];
 static uint32_t status_reg = 0;
 
 // extern dwt_txconfig_t txconfig_options;
@@ -205,15 +205,16 @@ void generate_msg(uint8_t *tx_msg,
   tx_msg[7] = (receiver_id >> 8) & 0xFF;  // receiver_id high byte
   tx_msg[8] = receiver_id & 0xFF;         // receiver_id low byte
 
-  tx_msg[9] = position[0];
-  tx_msg[10] = position[1];
-  tx_msg[11] = position[2];
+  tx_msg[9] = message_type;
 
-  tx_msg[12] = velocity[0];
-  tx_msg[13] = velocity[1];
-  tx_msg[14] = velocity[2];
+  tx_msg[10] = position[0];
+  tx_msg[11] = position[1];
+  tx_msg[12] = position[2];
 
-  tx_msg[15] = message_type;
+  tx_msg[13] = velocity[0];
+  tx_msg[14] = velocity[1];
+  tx_msg[15] = velocity[2];
+
 
   // Default timestamps to 0
   tx_msg[16] = 0x00;
@@ -373,7 +374,7 @@ void Anchor_process_received_message(uint16_t sender_id) {
     // Check if the received message matches the expected format.
     if (memcmp(rx_buffer, const_receive_msg, ALL_MSG_COMMON_LEN + 2) == 0) {
 
-      if (rx_buffer[15] == 0xE0) {
+      if (rx_buffer[9] == 0xE0) {
         uint32_t resp_tx_time;
         int ret;
         static uint64_t T_reply_start, T_reply_end;
@@ -388,7 +389,7 @@ void Anchor_process_received_message(uint16_t sender_id) {
         // Calculate the final response TX timestamp.
         T_reply_end = (((uint64_t)(resp_tx_time & 0xFFFFFFFEUL)) << 8) + TX_ANT_DLY;
 
-        uint8_t tx_msg[26];
+        uint8_t tx_msg[22];
         int8_t pos[3] = { 6, 5, 4 };
         int8_t vel[3] = { 3, 2, 1 };
         generate_msg(tx_msg, frame_seq_nb, receiver_id, sender_id, pos, vel, 0xE1, NULL);
@@ -401,7 +402,7 @@ void Anchor_process_received_message(uint16_t sender_id) {
         setTransmitData(sizeof(tx_msg), tx_msg, 1, 1);  // ranging = 1, fcs = 1
         // startTransmit(true, false);                     // delayed TX, no response expected
 
-        startTransmit(true, true);  // delayed TX, no response expected
+        startTransmit(true, true);  // delayed TX, response expected
 
         // // Wait for TX confirmation
         // while (!(dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS_BIT_MASK)) {
@@ -413,36 +414,75 @@ void Anchor_process_received_message(uint16_t sender_id) {
 
         // // Re-enable receiver
         // dwt_rxenable(DWT_START_RX_IMMEDIATE);
+        Serial.println("Second message sent");
+        dwt_setrxtimeout(0);
+        // dwt_rxenable(DWT_START_RX_IMMEDIATE);
 
-      } else if (rx_buffer[15] == 0xE2) {  // Check for Final message type
+      } else if (rx_buffer[9] == 0xE2) {  // Check for Final message type
 
-        static double distance = 0;
-        uint32_t frame_len;
-        uint32_t T_poll_start, T_poll_end, T_reply_start, T_reply_end;
-        uint32_t T_reply,T_round;
+        // static double distance = 0;
+        // uint32_t frame_len;
+        // uint32_t T_poll_start2, T_poll_end2, T_reply_start, T_reply_end;
+        // uint32_t T_reply1, T_round1;
+        // uint32_t T_reply2, T_round2;
 
-        float clockOffsetRatio;
-        static double tof;
+        // float clockOffsetRatio;
+        // static double tof;
 
+        // T_poll_start2 = dwt_readtxtimestamplo32();
+        // T_poll_end2 = dwt_readrxtimestamplo32();
+        // clockOffsetRatio = ((float)dwt_readclockoffset()) / (uint32_t)(1 << 26);
+
+        // // resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &T_reply_start);
+        // // resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &T_reply_end);
+        // resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &T_reply1);
+        // resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &T_round1);
+        // resp_msg_get_ts(&rx_buffer[24], &T_reply2);
+
+        // T_round2 = T_poll_end2 - T_poll_start2;
+        // // T_reply = T_reply_end - T_reply_start;
+        // tof = ((T_round2 - T_reply2 * (1 - clockOffsetRatio)) / 2.0) * DWT_TIME_UNITS;
+        // distance = tof * SPEED_OF_LIGHT;
+
+        // snprintf(dist_str, sizeof(dist_str), "DIST: %3.2f m", distance);
+        // test_run_info((unsigned char *)dist_str);
+        // Serial.println("Second message sent");
+
+        Serial.println("Final message received");
+
+        // STEP 1: Compute reply timestamps and clock ratio
         T_poll_start = dwt_readtxtimestamplo32();
         T_poll_end = dwt_readrxtimestamplo32();
         clockOffsetRatio = ((float)dwt_readclockoffset()) / (uint32_t)(1 << 26);
 
+        // STEP 2: Read timestamps from anchor's response (rx_buffer)
+        resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &T_reply);  // T_reply = round2 - reply2
+
         // resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &T_reply_start);
         // resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &T_reply_end);
-        resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &T_reply);
-        resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &T_round);
+        // resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &T_reply);
+        // resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &T_reply_end);
 
-        // T_round = T_poll_end - T_poll_start;
+        // STEP 3: Calculate round-trip and distance
+        T_round = T_poll_end - T_poll_start;
         // T_reply = T_reply_end - T_reply_start;
-        tof = ((T_round - T_reply * (1-clockOffsetRatio)) / 2.0) * DWT_TIME_UNITS;
+        tof = ((T_round - T_reply * (1 - clockOffsetRatio)) / 2.0) * DWT_TIME_UNITS;
         distance = tof * SPEED_OF_LIGHT;
         
+      // Serial.println("Final sent: ");
+      // printRxBuffer(tx_msg, sizeof(tx_msg));
+      // Serial.println(ret);
       snprintf(dist_str, sizeof(dist_str), "DIST: %3.2f m", distance);
       test_run_info((unsigned char *)dist_str);
-        // Serial.println("Second message sent");
 
-        // Serial.println("Final message received");
+
+
+
+
+
+
+
+
 
         // Optional: extract and interpret Final message payload
         // uint64_t final_ts_data = 0;
@@ -479,7 +519,7 @@ void Anchor_process_received_message(uint16_t sender_id) {
         //   dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
         //   // return -1;
         // }
-      }
+      } else Serial.println("Ignored msg");
     } else Serial.println("Ignored");
   }
 
