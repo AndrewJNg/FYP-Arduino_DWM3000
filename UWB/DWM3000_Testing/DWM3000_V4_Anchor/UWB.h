@@ -32,8 +32,11 @@ int startTransmit(bool delayed, bool wait4resp);
 #define PIN_SS 5
 */
 
-#define TX_ANT_DLY 16385
-#define RX_ANT_DLY 16385
+#define TX_ANT_DLY 16370
+#define RX_ANT_DLY 16370
+
+// #define TX_ANT_DLY 16385
+// #define RX_ANT_DLY 16385
 
 // #define TX_ANT_DLY 16385
 // #define RX_ANT_DLY 16385
@@ -44,7 +47,7 @@ int startTransmit(bool delayed, bool wait4resp);
 #define RESP_MSG_POLL_RX_TS_IDX 10
 #define RESP_MSG_RESP_TX_TS_IDX 14
 
-#define POLL_RX_TO_RESP_TX_DLY_UUS 450
+#define POLL_RX_TO_RESP_TX_DLY_UUS 500 //450
 #define POLL_TX_TO_RESP_RX_DLY_UUS 240
 #define RESP_RX_TIMEOUT_UUS 400
 

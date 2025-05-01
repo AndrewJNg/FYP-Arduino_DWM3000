@@ -30,7 +30,7 @@ void setup() {
 }
 
 unsigned long previousMillis = 0;
-const unsigned long interval = 500;  // milliseconds
+const unsigned long interval = 100;  // milliseconds
 
 Kalman filter_A(0.02, 0.02, 0.1);  // test val
 Kalman filter_B(0.02, 0.02, 0.1);  // test val

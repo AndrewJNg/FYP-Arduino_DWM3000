@@ -29,6 +29,6 @@ void AnchorTask(void* parameter) {
 
   while (true) {
     Anchor_waiting_for_response(Bot_ID);  // your current function
-    vTaskDelay(1);  // short delay to yield CPU (optional)
+    // vTaskDelay(1);  // short delay to yield CPU (optional)
   }
 }
