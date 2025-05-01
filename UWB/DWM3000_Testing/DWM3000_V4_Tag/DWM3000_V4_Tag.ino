@@ -10,16 +10,22 @@ float this_anchor_target_distance = 1;  //measured distance to anchor in m
 uint16_t this_anchor_Adelay = 16600;    //starting value
 uint16_t Adelay_delta = 100;            //initial binary search step size
 
+// Default settings
+#define DWM3000_RST 27
+#define DWM3000_IRQ 34
+#define DWM3000_SS 4
+
 void setup() {
-  UWB_setup();
+  UWB_setup(DWM3000_RST, DWM3000_IRQ, DWM3000_SS);
   // dwt_setrxantennadelay(this_anchor_Adelay);
   // dwt_settxantennadelay(this_anchor_Adelay);
 }
 
+int8_t positions[3] = {1,2,3};
+int8_t velocities[3] = {4,5,6};
 
 void loop() {
-
-  double distance_received = get_UWB_Distance(Bot_ID, rec_Bot_ID);
+  double distance_received = get_UWB_Distance(Bot_ID, rec_Bot_ID, positions, velocities);
   Serial.print("DIST: \t");
   Serial.print(distance_received);
 

@@ -69,8 +69,7 @@ void PS4_move(int LX, int LY, int RX, int RY) {
 void Movement_setup() {
   // set motor pins as output
   for (int x = 0; x < sizeof(motorPin1); x++) {
-    ledcAttach( motorPin1[x], 5000, PWM_resolution);  // New ESP32 3.0 API combines Setup + Attach
-    ledcAttach( motorPin2[x], 5000, PWM_resolution);  // New ESP32 3.0 API combines Setup + Attach
-
+    ledcAttach( motorPin1[x], 5000, PWM_resolution);  // New ESP32 3.0 API combines Setup + Attach into a single function
+    ledcAttach( motorPin2[x], 5000, PWM_resolution);  
   }
 }

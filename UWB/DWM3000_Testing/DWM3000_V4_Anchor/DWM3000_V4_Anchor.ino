@@ -1,10 +1,18 @@
-#define Bot_ID 0xBB
+#define Bot_ID 0xAA
 #include "UWB.h"
+
+int8_t positions[3] = {2,0,0};
+int8_t velocities[3] = {0,0,0};
 
 uint16_t bot_id = Bot_ID;  // must be global/static to safely pass pointer
 
+// Default settings
+#define DWM3000_RST 27
+#define DWM3000_IRQ 34
+#define DWM3000_SS 4
+
 void setup() {
-  UWB_setup();
+  UWB_setup(DWM3000_RST, DWM3000_IRQ, DWM3000_SS);
 
   // Create the task on Core 0 (ESP32 has core 0 and core 1)
   xTaskCreatePinnedToCore(
@@ -24,11 +32,12 @@ void loop() {
 
 
 
+
 void AnchorTask(void* parameter) {
   uint16_t sender_id = *(uint16_t*)parameter;
 
   while (true) {
-    Anchor_waiting_for_response(Bot_ID);  // your current function
+    Anchor_waiting_for_response(Bot_ID, positions, velocities); 
     // vTaskDelay(1);  // short delay to yield CPU (optional)
   }
 }
