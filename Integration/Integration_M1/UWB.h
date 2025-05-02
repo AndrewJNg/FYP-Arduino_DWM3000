@@ -3,6 +3,7 @@
 #include "dw3000.h"
 #include "SPI.h"
 
+#define dw3000_debug false
 // Default settings
 // #define PIN_RST 27
 // #define PIN_IRQ 34
@@ -22,11 +23,11 @@ void setTransmitData(int length, uint8_t *buffer, int ranging, int fcs);
 int startTransmit(bool delayed, bool wait4resp);
 
 
-#define TX_ANT_DLY 16370
-#define RX_ANT_DLY 16370
+// #define TX_ANT_DLY 16370
+// #define RX_ANT_DLY 16370
 
-// #define TX_ANT_DLY 16385
-// #define RX_ANT_DLY 16385
+#define TX_ANT_DLY 16385
+#define RX_ANT_DLY 16385
 
 #define ALL_MSG_COMMON_LEN 5
 #define ALL_MSG_SN_IDX 2
@@ -41,6 +42,8 @@ int startTransmit(bool delayed, bool wait4resp);
 static uint8_t frame_seq_nb = 0;
 static uint8_t rx_buffer[34];
 static uint32_t status_reg = 0;
+
+bool anchor = 1;
 
 
 int8_t read_position[3] = { 0, 0, 0 };
@@ -139,14 +142,16 @@ void UWB_setup(int PIN_RST, int PIN_IRQ, int PIN_SS) {
 }
 
 void printRxBuffer(uint8_t *buffer, uint16_t length) {
-  buffer[2] = frame_seq_nb;
-  Serial.print("Received data: ");
-  for (uint16_t i = 0; i < length; i++) {
-    if (buffer[i] < 0x10) Serial.print("0");  // Pad single-digit hex with zero
-    Serial.print(buffer[i], HEX);
-    Serial.print(" ");
+  if (dw3000_debug) {
+    buffer[2] = frame_seq_nb;
+    Serial.print("Received data: ");
+    for (uint16_t i = 0; i < length; i++) {
+      if (buffer[i] < 0x10) Serial.print("0");  // Pad single-digit hex with zero
+      Serial.print(buffer[i], HEX);
+      Serial.print(" ");
+    }
+    Serial.println();
   }
-  Serial.println();
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -218,8 +223,21 @@ double get_UWB_Distance(uint16_t sender_id, uint16_t receiver_id, int8_t pos[3],
 // Step 1: Tag Sends Initial Message (Poll)
 void Tag_set_send_mode(uint16_t sender_id, uint16_t receiver_id, int8_t pos[3], int8_t vel[3]) {
   // Set the receive timeout for the response message in microseconds.
+  // dwt_setrxtimeout(RESP_RX_TIMEOUT_UUS);
+  // dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);  // Clear TX frame sent event bit in status register
+  //   dwt_forcetrxoff();  // Clean stop if coming from RX mode
+    
+  dwt_forcetrxoff(); // Clean stop any ongoing operations
+  
+  // Configure for tag mode
+  dwt_setrxaftertxdelay(POLL_TX_TO_RESP_RX_DLY_UUS);
   dwt_setrxtimeout(RESP_RX_TIMEOUT_UUS);
-  dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);  // Clear TX frame sent event bit in status register
+  
+  // Clear any pending status bits
+  dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR | 
+                    SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_TXFRS_BIT_MASK);
+  vTaskDelay(10);  // Suspend main loop
+  
 
   // Prepare message to be sent out
   frame_seq_nb++;  // Increment sequence number
@@ -358,12 +376,16 @@ double Tag_process_received_message(uint16_t sender_id, uint16_t receiver_id) {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void Anchor_waiting_for_response(uint16_t sender_id, int8_t pos[3], int8_t vel[3]) {
+  const unsigned long timeout_ms = 50;  // Wait max 50 ms
+  unsigned long start_time = millis();
+
   // Set as Anchor and to activate reception immediately (no timeout).
   dwt_setrxtimeout(0);
   dwt_rxenable(DWT_START_RX_IMMEDIATE);
 
   // Wait for a received frame or error/timeout.
   while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_ERR))) {
+    // if (anchor == 0) break;
   }
 
   // If a valid frame is received, process the message.
@@ -510,21 +532,51 @@ void DW3000_get_robot_info(int8_t position[3], int8_t velocity[3]) {
     velocity[i] = read_velocity[i];
   }
 
-  Serial.print("Position: [");
-  for (int i = 0; i < 3; i++) {
-    Serial.print(position[i]);
-    if (i < 2) Serial.print(", ");
-  }
-  Serial.println("]");
 
-  Serial.print("Velocity: [");
-  for (int i = 0; i < 3; i++) {
-    Serial.print(velocity[i]);
-    if (i < 2) Serial.print(", ");
+  if (dw3000_debug) {
+    Serial.print("Position: [");
+    for (int i = 0; i < 3; i++) {
+      Serial.print(position[i]);
+      if (i < 2) Serial.print(", ");
+    }
+    Serial.println("]");
+
+    Serial.print("Velocity: [");
+    for (int i = 0; i < 3; i++) {
+      Serial.print(velocity[i]);
+      if (i < 2) Serial.print(", ");
+    }
+    Serial.println("]");
   }
-  Serial.println("]");
+}
+void switchToTagMode() {
+  dwt_forcetrxoff(); // Clean stop any ongoing operations
+  
+  // Configure for tag mode
+  dwt_setrxaftertxdelay(POLL_TX_TO_RESP_RX_DLY_UUS);
+  dwt_setrxtimeout(RESP_RX_TIMEOUT_UUS);
+  
+  // Clear any pending status bits
+  dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR | 
+                    SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_TXFRS_BIT_MASK);
+  
+  anchor = 0;
+  // Serial.println("Switched to TAG mode");
 }
 
+void switchToAnchorMode() {
+  dwt_forcetrxoff(); // Clean stop any ongoing operations
+  
+  // Configure for anchor mode
+  dwt_setrxtimeout(0); // No timeout - wait indefinitely
+  
+  // Clear any pending status bits
+  dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR | 
+                    SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_TXFRS_BIT_MASK);
+  
+  anchor = 1;
+  // Serial.println("Switched to ANCHOR mode");
+}
 
 
 

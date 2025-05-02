@@ -1,4 +1,4 @@
-#define Bot_ID 0xAA
+#define Bot_ID 0xDD
 #define rec_Bot_ID 0xBB
 #include "UWB.h"
 #include "kalmanFilter.h"
@@ -11,9 +11,13 @@ uint16_t this_anchor_Adelay = 16600;    //starting value
 uint16_t Adelay_delta = 100;            //initial binary search step size
 
 // Default settings
-#define DWM3000_RST 27
-#define DWM3000_IRQ 34
-#define DWM3000_SS 4
+// #define DWM3000_RST 27
+// #define DWM3000_IRQ 34
+// #define DWM3000_SS 4
+
+#define DWM3000_RST 15
+#define DWM3000_IRQ 13
+#define DWM3000_SS 5
 
 void setup() {
   UWB_setup(DWM3000_RST, DWM3000_IRQ, DWM3000_SS);
@@ -21,8 +25,8 @@ void setup() {
   // dwt_settxantennadelay(this_anchor_Adelay);
 }
 
-int8_t positions[3] = {1,2,3};
-int8_t velocities[3] = {4,5,6};
+int8_t positions[3] = { 1, 2, 3 };
+int8_t velocities[3] = { 4, 5, 6 };
 
 void loop() {
   double distance_received = get_UWB_Distance(Bot_ID, rec_Bot_ID, positions, velocities);

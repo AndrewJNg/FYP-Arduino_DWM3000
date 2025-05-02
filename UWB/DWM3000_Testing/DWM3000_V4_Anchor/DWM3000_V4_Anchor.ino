@@ -11,6 +11,10 @@ uint16_t bot_id = Bot_ID;  // must be global/static to safely pass pointer
 #define DWM3000_IRQ 34
 #define DWM3000_SS 4
 
+// #define DWM3000_RST 15
+// #define DWM3000_IRQ 13
+// #define DWM3000_SS 5
+
 void setup() {
   UWB_setup(DWM3000_RST, DWM3000_IRQ, DWM3000_SS);
 
