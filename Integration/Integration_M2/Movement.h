@@ -72,4 +72,5 @@ void Movement_setup() {
     ledcAttach( motorPin1[x], 5000, PWM_resolution);  // New ESP32 3.0 API combines Setup + Attach into a single function
     ledcAttach( motorPin2[x], 5000, PWM_resolution);  
   }
+  motor(motor_Speed);  // set all wheels to stop
 }

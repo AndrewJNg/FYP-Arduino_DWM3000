@@ -21,15 +21,6 @@ public:
     UWB_setup();
   }
 
-  // Set module as tag or anchor
-  void setAnchorMode(bool isAnchor) {
-    if (isAnchor) {
-      if (anchor == false) switchToAnchorMode();
-    } else {
-      if (anchor == true) switchToTagMode();
-    }
-  }
-
   // Tag functionality - get distance to another module
   double getDistance(uint16_t receiver_id, int8_t pos[3], int8_t vel[3]) {
     setAnchorMode(false);
@@ -175,6 +166,15 @@ private:
     if (dw3000_debug) {
       Serial.println("DWM3000 Initialized");
       Serial.println("Setup complete");
+    }
+  }
+
+  // Set module as tag or anchor
+  void setAnchorMode(bool isAnchor) {
+    if (isAnchor) {
+      if (anchor == false) switchToAnchorMode();
+    } else {
+      if (anchor == true) switchToTagMode();
     }
   }
 
