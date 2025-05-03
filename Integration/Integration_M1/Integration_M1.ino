@@ -11,7 +11,8 @@ double y_current;
 // Functional Macros
 #include "PS4.h"
 #include "Movement.h"
-#include "UWB.h"
+// #include "UWB.h"
+#include "UWB2.h"
 #include "kalmanFilter.h"
 #include "multilateration.h"
 
@@ -36,6 +37,8 @@ int8_t dw_velocity_c[3] = { 0, 0, 0 };
 static double dist_2_C;
 Kalman filter_C(0.02, 0.02, 0.1);
 
+DWM3000 dwm3000(DWM3000_RST, DWM3000_IRQ, DWM3000_SS, Bot_ID, false);  // true enables debug output
+
 void setup() {
   Serial.begin(115200);
 
@@ -43,12 +46,14 @@ void setup() {
   Movement_setup();
 
   motor(motor_Speed);  // set all wheels to stop
-  // while (!PS4.isConnected()) {
-  //   motor(motor_Speed);
-  // }
+                       // while (!PS4.isConnected()) {
+                       //   motor(motor_Speed);
+                       // }
 
 
-  UWB_setup(DWM3000_RST, DWM3000_IRQ, DWM3000_SS);
+  // UWB_setup(DWM3000_RST, DWM3000_IRQ, DWM3000_SS);
+  dwm3000.begin();
+  dwm3000.setAnchorMode(false);  // false = tag mode, true = anchor mode
 
   // Create the task on Core 0 (ESP32 has core 0 and core 1)
   // xTaskCreatePinnedToCore(
@@ -66,6 +71,7 @@ void loop() {
   // notify();
   // PS4_move(stick_LX, stick_LY, stick_RX, stick_RY);
 
+  /*
   static uint32_t last_switch = 0;
   uint32_t now = millis();
 
@@ -134,6 +140,7 @@ void loop() {
     // Serial.print("time: ");
     // Serial.println(millis() - pong);
   }
+  */
 
 
 

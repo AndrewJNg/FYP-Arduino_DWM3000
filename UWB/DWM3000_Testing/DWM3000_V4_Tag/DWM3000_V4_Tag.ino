@@ -38,7 +38,7 @@ void loop() {
     Serial.print(filter_A.updateFilter(distance_received));
   }
   Serial.println();
-  Sleep(5);
+  Sleep(50);
 
 
   // static float last_delta = 0.0;

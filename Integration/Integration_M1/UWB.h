@@ -377,7 +377,7 @@ double Tag_process_received_message(uint16_t sender_id, uint16_t receiver_id) {
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-double Anchor_waiting_for_response(uint16_t sender_id, int8_t pos[3], int8_t vel[3]) {
+double sender_id(uint16_t sender_id, int8_t pos[3], int8_t vel[3]) {
   const unsigned long timeout_ms = 50;  // 50ms timeout
   unsigned long start_time = millis();
   double distance = -1;
