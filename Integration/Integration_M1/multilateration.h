@@ -3,6 +3,9 @@
 
 #define MAX_ROBOTS 10
 
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////
 typedef struct {
     int bot_id;
     double x;
@@ -12,6 +15,7 @@ typedef struct {
     double distances;  // Distance from this robot to others
 
 } Robot;
+
 
 typedef struct {
     double x;

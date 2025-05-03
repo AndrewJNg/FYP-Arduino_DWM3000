@@ -22,6 +22,8 @@ double Anchor_process_received_message(uint16_t sender_id, int8_t pos[3], int8_t
 void setTransmitData(int length, uint8_t *buffer, int ranging, int fcs);
 int startTransmit(bool delayed, bool wait4resp);
 
+int16_t DW3000_get_robot_info(int8_t position[3], int8_t velocity[3]);
+
 
 // #define TX_ANT_DLY 16370
 // #define RX_ANT_DLY 16370
@@ -48,6 +50,7 @@ bool anchor = 1;
 
 int8_t read_position[3] = { 0, 0, 0 };
 int8_t read_velocity[3] = { 0, 0, 0 };
+uint16_t last_receiver_id = 0;
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -476,6 +479,7 @@ double Anchor_process_received_message(uint16_t sender_id, int8_t pos[3], int8_t
         read_velocity[0] = rx_buffer[13];
         read_velocity[1] = rx_buffer[14];
         read_velocity[2] = rx_buffer[15];
+        last_receiver_id = receiver_id;
 
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -520,6 +524,7 @@ double Anchor_process_received_message(uint16_t sender_id, int8_t pos[3], int8_t
         // Display distance
         // snprintf(dist_str, sizeof(dist_str), "DIST: %3.2f m", distance);
         // test_run_info((unsigned char *)dist_str);
+        last_receiver_id = receiver_id;
 
 
 
@@ -535,16 +540,15 @@ double Anchor_process_received_message(uint16_t sender_id, int8_t pos[3], int8_t
   return distance;
 }
 
-void DW3000_get_robot_info(int8_t position[3], int8_t velocity[3]) {
+int16_t DW3000_get_robot_info(int8_t position[3], int8_t velocity[3]) {
   // Update values
-  Serial.println();
   for (int i = 0; i < 3; i++) {
     position[i] = read_position[i];
     velocity[i] = read_velocity[i];
   }
 
-
   if (dw3000_debug) {
+    Serial.println();
     Serial.print("Position: [");
     for (int i = 0; i < 3; i++) {
       Serial.print(position[i]);
@@ -559,7 +563,13 @@ void DW3000_get_robot_info(int8_t position[3], int8_t velocity[3]) {
     }
     Serial.println("]");
   }
+
+  return last_receiver_id;
 }
+
+
+
+
 void switchToTagMode() {
   dwt_forcetrxoff();  // Clean stop any ongoing operations
 

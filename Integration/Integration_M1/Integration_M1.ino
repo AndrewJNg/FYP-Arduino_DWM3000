@@ -93,13 +93,13 @@ void loop() {
       }
 
     } else if (swap % 3 == 1) {
-      distance_received = get_UWB_Distance(Bot_ID, 0xBB, positions, velocities);
-      Serial.print("DIST B: ");
+      distance_received = get_UWB_Distance(Bot_ID, 0xDD, positions, velocities);
+      Serial.print("DIST D: ");
       Serial.print(dist_2_B);
 
       if (distance_received != -1 && distance_received > 0) {
         dist_2_B = filter_B.updateFilter(distance_received);
-        Serial.print("\tDIST B filtered: ");
+        Serial.print("\tDIST D filtered: ");
         Serial.print(dist_2_B);
         DW3000_get_robot_info(dw_pos_b, dw_velocity_b);
       }
@@ -125,8 +125,11 @@ void loop() {
     if (anchor == 0) switchToAnchorMode();  // Only switch if not already in anchor mode
 
     // unsigned long pong = millis();
-    Serial.print("\tIncoming : ");
-    Serial.println(Anchor_waiting_for_response(Bot_ID, positions, velocities));
+    Serial.print("Incoming : ");
+    Serial.print(Anchor_waiting_for_response(Bot_ID, positions, velocities));
+    Serial.print("\t Address: ");
+    Serial.print(DW3000_get_robot_info(dw_pos_b, dw_velocity_b), HEX);
+    Serial.println("");
 
     // Serial.print("time: ");
     // Serial.println(millis() - pong);
