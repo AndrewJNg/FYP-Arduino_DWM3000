@@ -1,4 +1,4 @@
-#define Bot_ID 0xDD
+uint8_t Bot_ID = 0xDD;  // must be global/static to safely pass pointer
 // #define AntennaDelay 16370
 
 #define DWM3000_RST 15
@@ -19,12 +19,26 @@ double y_current;
 int8_t positions[3] = { 0, 0, 0 };
 int8_t velocities[3] = { 0, 0, 0 };
 
-uint16_t bot_id = Bot_ID;  // must be global/static to safely pass pointer
+
+
+int8_t dw_pos_a[3] = { 0, 0, 0 };
+int8_t dw_velocity_a[3] = { 0, 0, 0 };
+static double dist_2_A;
+Kalman filter_A(0.02, 0.02, 0.1);
+
+int8_t dw_pos_b[3] = { 0, 0, 0 };
+int8_t dw_velocity_b[3] = { 0, 0, 0 };
+static double dist_2_B;
+Kalman filter_B(0.02, 0.02, 0.1);
+
+int8_t dw_pos_c[3] = { 0, 0, 0 };
+int8_t dw_velocity_c[3] = { 0, 0, 0 };
+static double dist_2_C;
+Kalman filter_C(0.02, 0.02, 0.1);
+
 void setup() {
-  // Setup Read Spead and Serial monitor's Baud Rate
   Serial.begin(115200);
 
-  // Macro Setups
   // PS4_setup();
   Movement_setup();
 
@@ -41,99 +55,12 @@ void setup() {
   //   AnchorTask,    // Function to run
   //   "AnchorTask",  // Name of task
   //   4096 * 2,      // Stack size (words, not bytes)
-  //   &bot_id,       // Parameter to pass
+  //   &Bot_ID,       // Parameter to pass
   //   1,             // Priority (1 is usually fine)
   //   NULL,          // Task handle (not used here)
   //   0              // Core to pin to (0 = PRO core)
   // );
 }
-
-
-unsigned long previousMillis = 0;
-const unsigned long interval = 1000;  // milliseconds
-
-Kalman filter_A(0.02, 0.02, 0.1);  // test val
-Kalman filter_B(0.02, 0.02, 0.1);  // test val
-Kalman filter_C(0.02, 0.02, 0.1);  // test val
-
-// int dw_pos[3] = { 0, 0, 0 };
-// int dw_velocity[3] = { 0, 0, 0 };
-
-int8_t dw_pos_a[3] = { 0, 0, 0 };
-int8_t dw_velocity_a[3] = { 0, 0, 0 };
-int8_t dw_pos_b[3] = { 0, 0, 0 };
-int8_t dw_velocity_b[3] = { 0, 0, 0 };
-int8_t dw_pos_c[3] = { 0, 0, 0 };
-int8_t dw_velocity_c[3] = { 0, 0, 0 };
-
-
-static double dist_2_A;
-static double dist_2_B;
-static double dist_2_C;
-
-// void AnchorTask(void* parameter) {
-//   uint16_t sender_id = *(uint16_t*)parameter;
-
-//   while (true) {
-// vTaskDelay(1);  // short delay to yield CPU (optional)
-
-// unsigned long currentMillis = millis();
-// static int swap = 0;
-// static double distance_received;
-
-// // Anchor_waiting_for_response(Bot_ID, positions, velocities);
-//   if (currentMillis - previousMillis >= interval) {
-//     previousMillis = currentMillis;
-
-//     if (swap % 3 == 0) {
-//       distance_received = get_UWB_Distance(Bot_ID, 0xAA, positions, velocities);  //takes around 2ms to obtain information
-//       Serial.print("DIST A: ");
-//       Serial.print(distance_received);
-
-//       if (distance_received != -1 && distance_received > 0) {
-//         dist_2_A = filter_A.updateFilter(distance_received);
-//         Serial.print("\tDIST A filtered: ");
-//         Serial.print(dist_2_A);
-//         DW3000_get_robot_info(dw_pos_a, dw_velocity_a);
-//       }
-
-//     } else if (swap % 3 == 1) {
-//       distance_received = get_UWB_Distance(Bot_ID, 0xBB, positions, velocities);
-//       Serial.print("DIST B: ");
-//       Serial.print(dist_2_B);
-
-//       if (distance_received != -1 && distance_received > 0) {
-//         dist_2_B = filter_B.updateFilter(distance_received);
-//         Serial.print("\tDIST B filtered: ");
-//         Serial.print(dist_2_B);
-//         DW3000_get_robot_info(dw_pos_b, dw_velocity_b);
-//       }
-
-//     } else {
-//       distance_received = get_UWB_Distance(Bot_ID, 0xCC, positions, velocities);
-//       Serial.print("DIST C: ");
-//       Serial.print(distance_received);
-
-//       if (distance_received != -1 && distance_received > 0) {
-//         dist_2_C = filter_C.updateFilter(distance_received);
-//         Serial.print("\tDIST C filtered: ");
-//         Serial.print(dist_2_C);
-//         DW3000_get_robot_info(dw_pos_c, dw_velocity_c);
-//       }
-//     }
-//     swap++;
-
-//   } else {
-//         // Serial.println("Enter Anchor mode");
-//     // vTaskDelay(10);  // Suspend main loop forever
-//     // Anchor_waiting_for_response(Bot_ID, positions, velocities);
-//   }
-//   vTaskDelay(10);  // Suspend main loop forever
-// }
-//     if (anchor == 1)
-//       Anchor_waiting_for_response(Bot_ID, positions, velocities);
-//   }
-// }
 
 void loop() {
   // notify();
@@ -143,62 +70,66 @@ void loop() {
   uint32_t now = millis();
 
   // Tag mode for 100ms every second (adjust as needed)
-  if (now - last_switch >= 500) {
-    if (anchor) {  // Only switch if not already in tag mode
-      switchToTagMode();
-    }
+  if (now - last_switch >= 50) {
+    last_switch = now;
+    if (anchor) switchToTagMode();  // Only switch if not already in tag mode
+
+
 
     // Perform tag operations
     static int swap = 0;
     double distance_received = -1;
-    // for (int i = 0; i < 10; i++) {
-      if (swap % 3 == 0) {
-        distance_received = get_UWB_Distance(Bot_ID, 0xAA, positions, velocities);  //takes around 2ms to obtain information
-        Serial.print("DIST A: ");
-        Serial.print(distance_received);
+    if (swap % 3 == 0) {
+      distance_received = get_UWB_Distance(Bot_ID, 0xAA, positions, velocities);  //takes around 5ms to obtain information for TWR
 
-        if (distance_received != -1 && distance_received > 0) {
-          dist_2_A = filter_A.updateFilter(distance_received);
-          Serial.print("\tDIST A filtered: ");
-          Serial.print(dist_2_A);
-          DW3000_get_robot_info(dw_pos_a, dw_velocity_a);
-        }
+      Serial.print("DIST A: ");
+      Serial.print(distance_received);
 
-      } else if (swap % 3 == 1) {
-        distance_received = get_UWB_Distance(Bot_ID, 0xBB, positions, velocities);
-        Serial.print("DIST B: ");
-        Serial.print(dist_2_B);
-
-        if (distance_received != -1 && distance_received > 0) {
-          dist_2_B = filter_B.updateFilter(distance_received);
-          Serial.print("\tDIST B filtered: ");
-          Serial.print(dist_2_B);
-          DW3000_get_robot_info(dw_pos_b, dw_velocity_b);
-        }
-
-      } else {
-        distance_received = get_UWB_Distance(Bot_ID, 0xCC, positions, velocities);
-        Serial.print("DIST C: ");
-        Serial.print(distance_received);
-
-        if (distance_received != -1 && distance_received > 0) {
-          dist_2_C = filter_C.updateFilter(distance_received);
-          Serial.print("\tDIST C filtered: ");
-          Serial.print(dist_2_C);
-          DW3000_get_robot_info(dw_pos_c, dw_velocity_c);
-        }
+      if (distance_received != -1 && distance_received > 0) {
+        dist_2_A = filter_A.updateFilter(distance_received);
+        Serial.print("\tDIST A filtered: ");
+        Serial.print(dist_2_A);
+        DW3000_get_robot_info(dw_pos_a, dw_velocity_a);
       }
-          Serial.println();
-    // }
+
+    } else if (swap % 3 == 1) {
+      distance_received = get_UWB_Distance(Bot_ID, 0xBB, positions, velocities);
+      Serial.print("DIST B: ");
+      Serial.print(dist_2_B);
+
+      if (distance_received != -1 && distance_received > 0) {
+        dist_2_B = filter_B.updateFilter(distance_received);
+        Serial.print("\tDIST B filtered: ");
+        Serial.print(dist_2_B);
+        DW3000_get_robot_info(dw_pos_b, dw_velocity_b);
+      }
+
+    } else {
+      distance_received = get_UWB_Distance(Bot_ID, 0xEE, positions, velocities);
+      Serial.print("DIST E: ");
+      Serial.print(distance_received);
+
+      if (distance_received != -1 && distance_received > 0) {
+        dist_2_C = filter_C.updateFilter(distance_received);
+        Serial.print("\tDIST E filtered: ");
+        Serial.print(dist_2_C);
+        DW3000_get_robot_info(dw_pos_c, dw_velocity_c);
+      }
+    }
+    Serial.println();
 
     swap++;
-    last_switch = now;
+
   } else {
     // Anchor mode the rest of the time
-    if (anchor == 0) {  // Only switch if not already in anchor mode
-      switchToAnchorMode();
-    }
-    Anchor_waiting_for_response(Bot_ID, positions, velocities);
+    if (anchor == 0) switchToAnchorMode();  // Only switch if not already in anchor mode
+
+    // unsigned long pong = millis();
+    Serial.print("\tIncoming : ");
+    Serial.println(Anchor_waiting_for_response(Bot_ID, positions, velocities));
+
+    // Serial.print("time: ");
+    // Serial.println(millis() - pong);
   }
 
 

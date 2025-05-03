@@ -16,8 +16,8 @@ void Tag_set_send_mode(uint16_t sender_id, uint16_t receiver_id, int8_t position
 double Tag_waiting_for_response(uint16_t sender_id, uint16_t receiver_id);
 double Tag_process_received_message(uint16_t sender_id, uint16_t receiver_id);
 
-void Anchor_waiting_for_response(uint16_t sender_id, int8_t pos[3], int8_t vel[3]);
-void Anchor_process_received_message(uint16_t sender_id, int8_t pos[3], int8_t vel[3]);
+double Anchor_waiting_for_response(uint16_t sender_id, int8_t pos[3], int8_t vel[3]);
+double Anchor_process_received_message(uint16_t sender_id, int8_t pos[3], int8_t vel[3]);
 
 void setTransmitData(int length, uint8_t *buffer, int ranging, int fcs);
 int startTransmit(bool delayed, bool wait4resp);
@@ -226,18 +226,17 @@ void Tag_set_send_mode(uint16_t sender_id, uint16_t receiver_id, int8_t pos[3], 
   // dwt_setrxtimeout(RESP_RX_TIMEOUT_UUS);
   // dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);  // Clear TX frame sent event bit in status register
   //   dwt_forcetrxoff();  // Clean stop if coming from RX mode
-    
-  dwt_forcetrxoff(); // Clean stop any ongoing operations
-  
+
+  dwt_forcetrxoff();  // Clean stop any ongoing operations
+
   // Configure for tag mode
   dwt_setrxaftertxdelay(POLL_TX_TO_RESP_RX_DLY_UUS);
   dwt_setrxtimeout(RESP_RX_TIMEOUT_UUS);
-  
+
   // Clear any pending status bits
-  dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR | 
-                    SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_TXFRS_BIT_MASK);
+  dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR | SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_TXFRS_BIT_MASK);
   vTaskDelay(10);  // Suspend main loop
-  
+
 
   // Prepare message to be sent out
   frame_seq_nb++;  // Increment sequence number
@@ -375,9 +374,10 @@ double Tag_process_received_message(uint16_t sender_id, uint16_t receiver_id) {
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void Anchor_waiting_for_response(uint16_t sender_id, int8_t pos[3], int8_t vel[3]) {
-  const unsigned long timeout_ms = 50;  // Wait max 50 ms
+double Anchor_waiting_for_response(uint16_t sender_id, int8_t pos[3], int8_t vel[3]) {
+  const unsigned long timeout_ms = 50;  // 50ms timeout
   unsigned long start_time = millis();
+  double distance = -1;
 
   // Set as Anchor and to activate reception immediately (no timeout).
   dwt_setrxtimeout(0);
@@ -386,22 +386,32 @@ void Anchor_waiting_for_response(uint16_t sender_id, int8_t pos[3], int8_t vel[3
   // Wait for a received frame or error/timeout.
   while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_ERR))) {
     // if (anchor == 0) break;
+    if (millis() - start_time >= timeout_ms) {
+      // Serial.println("Anchor RX timeout");
+      dwt_forcetrxoff();
+      return -1;
+    }
   }
+
+  /////////////////////////////////////////////////////////
 
   // If a valid frame is received, process the message.
   if (status_reg & SYS_STATUS_RXFCG_BIT_MASK) {
-    Anchor_process_received_message(sender_id, pos, vel);
+    distance = Anchor_process_received_message(sender_id, pos, vel);
 
     // Clear good RX frame event in the DW IC status register.
     dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
   } else {
     // Clear RX error events in the DW IC status register.
     dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_ERR);
+    distance = -1;
   }
+  return distance;
 }
 
-void Anchor_process_received_message(uint16_t sender_id, int8_t pos[3], int8_t vel[3]) {
+double Anchor_process_received_message(uint16_t sender_id, int8_t pos[3], int8_t vel[3]) {
   uint32_t frame_len;
+  double distance = -1;
 
   ////////////////////////////////////////////////////////////////////////
   // Clear good RX frame event in the DW IC status register.
@@ -471,7 +481,6 @@ void Anchor_process_received_message(uint16_t sender_id, int8_t pos[3], int8_t v
         ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
       } else if (rx_buffer[9] == 0xE2) {  // Check for Final message type
-        static double distance = 0;
         uint32_t frame_len;
 
         uint32_t T_poll_start, T_poll_end, T_reply_start, T_reply_end;
@@ -509,8 +518,8 @@ void Anchor_process_received_message(uint16_t sender_id, int8_t pos[3], int8_t v
         distance = tof * SPEED_OF_LIGHT * DWT_TIME_UNITS;
 
         // Display distance
-        snprintf(dist_str, sizeof(dist_str), "DIST: %3.2f m", distance);
-        test_run_info((unsigned char *)dist_str);
+        // snprintf(dist_str, sizeof(dist_str), "DIST: %3.2f m", distance);
+        // test_run_info((unsigned char *)dist_str);
 
 
 
@@ -522,6 +531,8 @@ void Anchor_process_received_message(uint16_t sender_id, int8_t pos[3], int8_t v
   }
 
   printRxBuffer(rx_buffer, frame_len);
+
+  return distance;
 }
 
 void DW3000_get_robot_info(int8_t position[3], int8_t velocity[3]) {
@@ -550,30 +561,28 @@ void DW3000_get_robot_info(int8_t position[3], int8_t velocity[3]) {
   }
 }
 void switchToTagMode() {
-  dwt_forcetrxoff(); // Clean stop any ongoing operations
-  
+  dwt_forcetrxoff();  // Clean stop any ongoing operations
+
   // Configure for tag mode
   dwt_setrxaftertxdelay(POLL_TX_TO_RESP_RX_DLY_UUS);
   dwt_setrxtimeout(RESP_RX_TIMEOUT_UUS);
-  
+
   // Clear any pending status bits
-  dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR | 
-                    SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_TXFRS_BIT_MASK);
-  
+  dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR | SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_TXFRS_BIT_MASK);
+
   anchor = 0;
   // Serial.println("Switched to TAG mode");
 }
 
 void switchToAnchorMode() {
-  dwt_forcetrxoff(); // Clean stop any ongoing operations
-  
+  dwt_forcetrxoff();  // Clean stop any ongoing operations
+
   // Configure for anchor mode
-  dwt_setrxtimeout(0); // No timeout - wait indefinitely
-  
+  dwt_setrxtimeout(0);  // No timeout - wait indefinitely
+
   // Clear any pending status bits
-  dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR | 
-                    SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_TXFRS_BIT_MASK);
-  
+  dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR | SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_TXFRS_BIT_MASK);
+
   anchor = 1;
   // Serial.println("Switched to ANCHOR mode");
 }

@@ -1,5 +1,5 @@
-#define Bot_ID 0xDD
-#define rec_Bot_ID 0xBB
+#define Bot_ID 0xAA
+#define rec_Bot_ID 0xDD
 #include "UWB.h"
 #include "kalmanFilter.h"
 
@@ -11,13 +11,13 @@ uint16_t this_anchor_Adelay = 16600;    //starting value
 uint16_t Adelay_delta = 100;            //initial binary search step size
 
 // Default settings
-// #define DWM3000_RST 27
-// #define DWM3000_IRQ 34
-// #define DWM3000_SS 4
+#define DWM3000_RST 27
+#define DWM3000_IRQ 34
+#define DWM3000_SS 4
 
-#define DWM3000_RST 15
-#define DWM3000_IRQ 13
-#define DWM3000_SS 5
+// #define DWM3000_RST 15
+// #define DWM3000_IRQ 13
+// #define DWM3000_SS 5
 
 void setup() {
   UWB_setup(DWM3000_RST, DWM3000_IRQ, DWM3000_SS);
@@ -38,7 +38,7 @@ void loop() {
     Serial.print(filter_A.updateFilter(distance_received));
   }
   Serial.println();
-  Sleep(100);
+  Sleep(5);
 
 
   // static float last_delta = 0.0;
