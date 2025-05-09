@@ -57,7 +57,7 @@ private:
 
   // Configuration
   const uint16_t Bot_ID;
-  const bool dw3000_debug;
+  const bool dw3000_debug = true;
 
   // Constants
   static constexpr uint16_t TX_ANT_DLY = 16385;
@@ -490,7 +490,21 @@ private:
 
 
         } else Serial.println("Ignored msg");
-      } else Serial.println("Ignored");
+      } else {
+
+        if (rx_buffer[9] == 0xE0) {  // if msg not for me, just read address and position
+          // Serial.println("new msg");
+          read_position[0] = rx_buffer[10];
+          read_position[1] = rx_buffer[11];
+          read_position[2] = rx_buffer[12];
+
+          read_velocity[0] = rx_buffer[13];
+          read_velocity[1] = rx_buffer[14];
+          read_velocity[2] = rx_buffer[15];
+          last_receiver_id = receiver_id;
+          distance = -2;
+        }
+      }
     }
 
     printRxBuffer(rx_buffer, frame_len);

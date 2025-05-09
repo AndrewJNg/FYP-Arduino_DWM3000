@@ -53,7 +53,8 @@ private:
 public:
   int16_t base_bot_id;                        // Store the base robot ID
   const unsigned long STALE_TIMEOUT = 10000;  //60000;  // 1 minute in milliseconds
-  RobotSwarm(int16_t base_id) : base_bot_id(base_id) {}
+  RobotSwarm(int16_t base_id)
+    : base_bot_id(base_id) {}
 
 
   // Add a new robot address to the swarm
@@ -122,8 +123,8 @@ public:
       Serial.print(String(robot.velocity[2], 2));
       Serial.println("]");
 
-      Serial.print("Last Sent Time: ");
-      Serial.print(robot.last_update_time);
+      Serial.print("Time since last msg: ");
+      Serial.print(millis()-robot.last_update_time);
       Serial.println(" ms");
 
       Serial.print("Distance: ");
@@ -228,7 +229,7 @@ public:
   }
 
   // Update target robot's position using trilateration and automatically update timestamp
-  bool update_base_position(int16_t target_address) {
+  bool update_base_position(int16_t target_address, double pos[3]) {
     // First check if the target exists
     auto target_it = robots.find(target_address);
     if (target_it == robots.end()) {
@@ -245,6 +246,8 @@ public:
       target.position[0] = x;
       target.position[1] = y;
       target.last_update_time = current_millis();
+      pos[0] =x;
+      pos[1] =y;
 
 // Optionally print debug info
 #ifdef SWARM_DEBUG
@@ -289,7 +292,9 @@ public:
     robot.position[1] = y;
     // robot.distance = robot.filter_distance.updateFilter(new_distance);
     // robot.distance = new_distance;
-    robot.update_distance(new_distance);
+    if (new_distance != -1) {
+      robot.update_distance(new_distance);
+    }
     robot.update_timestamp();
   }
 

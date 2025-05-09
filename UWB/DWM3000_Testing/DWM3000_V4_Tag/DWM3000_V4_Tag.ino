@@ -1,5 +1,5 @@
-#define Bot_ID 0xAA
-#define rec_Bot_ID 0xDD
+#define Bot_ID 0xCC
+#define rec_Bot_ID 0xAA
 #include "UWB.h"
 #include "kalmanFilter.h"
 

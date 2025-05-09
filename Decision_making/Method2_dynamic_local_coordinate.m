@@ -8,10 +8,10 @@ global_noise_factor = 0.0;
 
 
 % Initial positions of robots
-robot_start_positions = [0 0; 1.5 0; 1.3 0.1]
+% robot_start_positions = [0 0; 1.5 0; 1.3 0.1]
 % robot_start_positions = [-5 -2; 2 -2; -2 2; 2 2]
 % robot_start_positions = [-5 -2; 2 -2; -2 2]
-% robot_start_positions = [0 0; 5 0; 3 3; 0 5]
+robot_start_positions = [-1.2 -1.2; 1.2 -1.2; 0 0; -1.2 1.2]
 %       ; 2 2; 5 1; 0 2; 4 2];  % Each row is [x, y] for one robot 
 
 positions = robot_start_positions;
@@ -48,8 +48,9 @@ actual_positions = robot_start_positions;
 for i = 1:50
 %     actual_positions = move_robot_step(actual_positions, 1, -1, -1);
 %     actual_positions = move_robot_step(actual_positions, 2, 1, -1);
-    actual_positions = move_robot_step(actual_positions, 3, 1, 1);
+%     actual_positions = move_robot_step(actual_positions, 3, 5, 5);
 %     actual_positions = move_robot_step(actual_positions, 4, 1, 1);
+    actual_positions = move_robot_step(actual_positions, 3, 1.2, 1.2);
     
     plotRobotsAfter(actual_positions);
 

@@ -50,6 +50,7 @@ void PS4_move(int LX, int LY, int RX, int RY) {
     https://seamonsters-2605.github.io/archive/mecanum
     similar principle is applied, however the direction of motion was changed (clockwise being positive angle)
   */
+  
 
   motor_Speed[0] = map(sin(angle + (1 * PI) / 4) * Speed_total_percent * 100, -10000, 10000, -PWM_resolution_max_value, PWM_resolution_max_value);
   motor_Speed[1] = map(sin(angle + (3 * PI) / 4) * Speed_total_percent * 100, -10000, 10000, -PWM_resolution_max_value, PWM_resolution_max_value);
