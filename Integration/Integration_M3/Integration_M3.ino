@@ -30,11 +30,18 @@ uint8_t Bot_ID = 0xEE;
 
 // Functional Macros
 #include "PS4.h"
-#include "Movement.h"
+// #include "Movement.h"
 #include "UWB.h"
 #include "kalmanFilter.h"
 #include "multilateration.h"
 #include "MPU6050.h"
+#include "Motor_Subsystem.h"
+
+//{MotorPin1, MotorPin2, EncAnalogPin, EncDir}
+MotorControl frontLeftMotor(12, 14, 34, 0);
+MotorControl frontRightMotor(4, 2, 39, 1);
+MotorControl backLeftMotor(27, 26, 35, 0);
+MotorControl backRightMotor(17, 16, 36, 1);
 
 DWM3000 dwm3000(DWM3000_RST, DWM3000_IRQ, DWM3000_SS, Bot_ID, false);
 RobotSwarm swarm(Bot_ID);
@@ -47,7 +54,11 @@ void setup() {
   Serial.begin(115200);
 
   // PS4_setup();
-  Movement_setup();
+  frontLeftMotor.setupMotorSystem();
+  frontRightMotor.setupMotorSystem();
+  backLeftMotor.setupMotorSystem();
+  backRightMotor.setupMotorSystem();
+  // Movement_setup();
   Gyro_setup();
 
   // while (!PS4.isConnected()) {
@@ -179,58 +190,58 @@ void loop() {
   // Print all robot information
   swarm.print_Robot_Swarm();
 
-  double target_x = 1;
-  double target_y = 1;
-  float angle = 0;
+  // double target_x = 1;
+  // double target_y = 1;
+  // float angle = 0;
 
-  float LX_vector = map(100*(target_x - real_pos[0]), -128, 127, -10000, 10000) / 100;
-  float LY_vector = map(100*(target_y - real_pos[1]), -127, 128, -10000, 10000) / 100;
-  // float angle;
-  if (LY_vector == 0 && LX_vector > 0) angle = PI / 2;
-  else if (LY_vector == 0 && LX_vector < 0) angle = 3 * PI / 2;
-  else if (LY_vector == 0 && LX_vector == 0) angle = 0;
-  else angle = atan(abs(LX_vector) / abs(LY_vector));
+  // float LX_vector = map(100*(target_x - real_pos[0]), -128, 127, -10000, 10000) / 100;
+  // float LY_vector = map(100*(target_y - real_pos[1]), -127, 128, -10000, 10000) / 100;
+  // // float angle;
+  // if (LY_vector == 0 && LX_vector > 0) angle = PI / 2;
+  // else if (LY_vector == 0 && LX_vector < 0) angle = 3 * PI / 2;
+  // else if (LY_vector == 0 && LX_vector == 0) angle = 0;
+  // else angle = atan(abs(LX_vector) / abs(LY_vector));
 
-  if (LX_vector > 0 && LY_vector > 0) angle = angle;
-  else if (LX_vector > 0 && LY_vector < 0) angle = PI - angle;
-  else if (LX_vector < 0 && LY_vector < 0) angle = PI + angle;
-  else if (LX_vector < 0 && LY_vector > 0) angle = 2 * PI - angle;
+  // if (LX_vector > 0 && LY_vector > 0) angle = angle;
+  // else if (LX_vector > 0 && LY_vector < 0) angle = PI - angle;
+  // else if (LX_vector < 0 && LY_vector < 0) angle = PI + angle;
+  // else if (LX_vector < 0 && LY_vector > 0) angle = 2 * PI - angle;
 
-  //Speed  (range of 0 to 100)
-  float Speed_total_percent = PS4_LeftAnalogStickSpeed(500*(target_x - real_pos[0]), 500*(target_y - real_pos[1]));
+  // //Speed  (range of 0 to 100)
+  // float Speed_total_percent = PS4_LeftAnalogStickSpeed(500*(target_x - real_pos[0]), 500*(target_y - real_pos[1]));
 
-  int motor_Speeds[4];
-  motor_Speeds[0] = map(sin(angle + (1 * PI) / 4) * Speed_total_percent * 100, -10000, 10000, -PWM_resolution_max_value, PWM_resolution_max_value);
-  motor_Speeds[1] = map(sin(angle + (3 * PI) / 4) * Speed_total_percent * 100, -10000, 10000, -PWM_resolution_max_value, PWM_resolution_max_value);
-  motor_Speeds[2] = map(sin(angle + (3 * PI) / 4) * Speed_total_percent * 100, -10000, 10000, -PWM_resolution_max_value, PWM_resolution_max_value);
-  motor_Speeds[3] = map(sin(angle + (1 * PI) / 4) * Speed_total_percent * 100, -10000, 10000, -PWM_resolution_max_value, PWM_resolution_max_value);
-  // motor_Speeds[0] = 255;
-  // motor_Speeds[1] = 255;
-  // motor_Speeds[2] = 255;
-  // motor_Speeds[3] = 255;
+  // int motor_Speeds[4];
+  // motor_Speeds[0] = map(sin(angle + (1 * PI) / 4) * Speed_total_percent * 100, -10000, 10000, -PWM_resolution_max_value, PWM_resolution_max_value);
+  // motor_Speeds[1] = map(sin(angle + (3 * PI) / 4) * Speed_total_percent * 100, -10000, 10000, -PWM_resolution_max_value, PWM_resolution_max_value);
+  // motor_Speeds[2] = map(sin(angle + (3 * PI) / 4) * Speed_total_percent * 100, -10000, 10000, -PWM_resolution_max_value, PWM_resolution_max_value);
+  // motor_Speeds[3] = map(sin(angle + (1 * PI) / 4) * Speed_total_percent * 100, -10000, 10000, -PWM_resolution_max_value, PWM_resolution_max_value);
+  // // motor_Speeds[0] = 255;
+  // // motor_Speeds[1] = 255;
+  // // motor_Speeds[2] = 255;
+  // // motor_Speeds[3] = 255;
 
-  Serial.print(real_pos[0]);
-  Serial.print("  ");
-  Serial.print(real_pos[1]);
-  Serial.print("  ");
-  Serial.print(angle);
-  Serial.print("  ");
-  Serial.print(Speed_total_percent);
-  Serial.print("  ");
+  // Serial.print(real_pos[0]);
+  // Serial.print("  ");
+  // Serial.print(real_pos[1]);
+  // Serial.print("  ");
+  // Serial.print(angle);
+  // Serial.print("  ");
+  // Serial.print(Speed_total_percent);
+  // Serial.print("  ");
 
 
-  Serial.print(motor_Speeds[0]);
-  Serial.print("  ");
-  Serial.print(motor_Speeds[1]);
-  Serial.print("  ");
-  Serial.print(motor_Speeds[2]);
-  Serial.print("  ");
-  Serial.print(motor_Speeds[3]);
-  Serial.println("  ");
+  // Serial.print(motor_Speeds[0]);
+  // Serial.print("  ");
+  // Serial.print(motor_Speeds[1]);
+  // Serial.print("  ");
+  // Serial.print(motor_Speeds[2]);
+  // Serial.print("  ");
+  // Serial.print(motor_Speeds[3]);
+  // Serial.println("  ");
 
-  Serial.print("Gyro z: ");
-  Serial.print(MPU_Z_angle());
-  Serial.println("");
+  // Serial.print("Gyro z: ");
+  // Serial.print(MPU_Z_angle());
+  // Serial.println("");
 
   //apply turn Speed to allow control using right analog stick
   // motor_Speed[0] = motor_Speed[0] + turn_Speed;
@@ -239,6 +250,6 @@ void loop() {
   // motor_Speed[3] = motor_Speed[3] - turn_Speed;
 
   // run all motors with according speeds
-  if(fixed_base==false)  motor(motor_Speeds);
+  // if(fixed_base==false)  motor(motor_Speeds);
   // vTaskDelay(100);  // Suspend main loop
 }

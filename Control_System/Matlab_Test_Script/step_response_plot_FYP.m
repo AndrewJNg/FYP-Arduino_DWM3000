@@ -6,7 +6,7 @@ fclose all; close all; clear all; clc;% Load data with original column names
 % data = readtable('TT_Speed_stepping_AS5600_step.csv', 'VariableNamingRule', 'preserve');
 % data = readtable('TT_Speed_stepping_AS5600_path.csv', 'VariableNamingRule', 'preserve');
 % data = readtable('TT_Speed_stepping_AS5600_pid.csv', 'VariableNamingRule', 'preserve');
-data = readtable('TT_Speed_stepping_AS5600_1m.csv', 'VariableNamingRule', 'preserve');
+data = readtable('TT_Speed_stepping_AS5600_2m.csv', 'VariableNamingRule', 'preserve');
 
 % data = readtable('step_half.csv', 'VariableNamingRule', 'preserve');
 % data = readtable('step_half08.csv', 'VariableNamingRule', 'preserve');
@@ -65,7 +65,7 @@ low_passedRightVelocity = filtfilt(b, a, rightVelocity);
 % Plot positions, deltas, and velocities
 figure;
 
-subplot(4, 1, 1);
+subplot(3, 1, 1);
 hold on;
 plot(time, leftPosition, 'b-', 'DisplayName', 'Left Motor Position');
 plot(time, rightPosition, 'r-', 'DisplayName', 'Right Motor Position');
@@ -77,7 +77,7 @@ grid on;
 hold off;
 
 
-subplot(4, 1, 2);
+subplot(3, 1, 2);
 hold on;
 plot(time, leftVelocity, 'b-', 'DisplayName', 'Left Motor Velocity (Original)');
 plot(time, rightVelocity, 'r-', 'DisplayName', 'Right Motor Velocity (Original)');
@@ -94,19 +94,19 @@ hold off;
 %%
 
 % Plot low-pass filtered velocity
-subplot(4, 1, 3);
-hold on;
-plot(time, leftVelocity, 'b-', 'DisplayName', 'Left Motor Velocity (Original)');
-plot(time, rightVelocity, 'r-', 'DisplayName', 'Right Motor Velocity (Original)');
-plot(time, low_passedLeftVelocity, 'b-', 'LineWidth', 2, 'DisplayName', 'Left Motor Velocity (Low-Pass 5 Hz)');
-plot(time, low_passedRightVelocity, 'r-', 'LineWidth', 2, 'DisplayName', 'Right Motor Velocity (Low-Pass 5 Hz)');
-xlabel('Time (s)');
-ylabel('Velocity (mm/s)');
-title('Low-Pass Filtered Motor Velocities (5 Hz Cutoff)');
-legend;
-% xlim([0,0.2])
-grid on;
-hold off;
+% subplot(4, 1, 3);
+% hold on;
+% plot(time, leftVelocity, 'b-', 'DisplayName', 'Left Motor Velocity (Original)');
+% plot(time, rightVelocity, 'r-', 'DisplayName', 'Right Motor Velocity (Original)');
+% plot(time, low_passedLeftVelocity, 'b-', 'LineWidth', 2, 'DisplayName', 'Left Motor Velocity (Low-Pass 5 Hz)');
+% plot(time, low_passedRightVelocity, 'r-', 'LineWidth', 2, 'DisplayName', 'Right Motor Velocity (Low-Pass 5 Hz)');
+% xlabel('Time (s)');
+% ylabel('Velocity (mm/s)');
+% title('Low-Pass Filtered Motor Velocities (5 Hz Cutoff)');
+% legend;
+% % xlim([0,0.2])
+% grid on;
+% hold off;
 %%
 % Calculate frequency response for left and right motor velocities
 Fs = 1 / mean(time_diff);  % Sampling frequency
@@ -120,7 +120,7 @@ leftVelocity_fft = fftshift(abs(fft(leftVelocity)));
 rightVelocity_fft = fftshift(abs(fft(rightVelocity)));
 
 % Plot frequency response of the motor velocities using scatter plot
-subplot(4, 1, 4);
+subplot(3, 1, 3);
 hold on;
 scatter(f, leftVelocity_fft, 'b', 'DisplayName', 'Left Motor Velocity Frequency Response');
 scatter(f, rightVelocity_fft, 'r', 'DisplayName', 'Right Motor Velocity Frequency Response');

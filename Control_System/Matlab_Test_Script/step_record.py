@@ -5,7 +5,7 @@ import time
 # Replace 'COM3' with your Arduino port (e.g., 'COM4' on Windows or '/dev/ttyUSB0' on Linux)
 arduino_port = 'COM5'
 baud_rate = 115200  # Ensure this matches your Arduino's serial settings
-csv_file = 'Motor_Step_Response_Matlab\TT_Speed_stepping_AS5600_1m.csv'
+csv_file = 'TT_Speed_stepping_AS5600_3m.csv'
 
 # Open serial connection
 ser = serial.Serial(arduino_port, baud_rate, timeout=1)

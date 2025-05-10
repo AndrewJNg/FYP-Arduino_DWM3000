@@ -45,7 +45,7 @@ void loop() {
   // delay(100);
 
   while (true) {
-  frontLeftMotor.setMotorPWM(1000);
+  frontLeftMotor.setMotorPWM(-1000);
     // Serial.print(frontLeftMotor.updateEncoder());
     // Serial.println();
     // frontLeftMotor.setSpeed(500, 0);
