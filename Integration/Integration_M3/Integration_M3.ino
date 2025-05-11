@@ -50,6 +50,8 @@ int8_t positions[3] = { xStart, yStart, 0 };
 int8_t velocities[3] = { 0, 0, 0 };
 double real_pos[3], real_velocity[3];
 
+// void followXYProfile(MotionParameters* motionParamsX, MotionParameters* motionParamsY);
+void followXYProfile(MotionParameters* motionParamsX, MotionParameters* motionParamsY, float targetAngle);
 void setup() {
   Serial.begin(115200);
 
@@ -67,18 +69,18 @@ void setup() {
 
 
   // Create the task on Core 0 (ESP32 has core 0 and core 1)
-  xTaskCreatePinnedToCore(
-    DW3000_Module,    // Function to run
-    "DW3000_Module",  // Name of task
-    4096,             // Stack size (words, not bytes)
-    &Bot_ID,          // Parameter to pass
-    1,                // Priority (1 is usually fine)
-    NULL,             // Task handle (not used here)
-    0                 // Core to pin to (0 = PRO core)
-  );
+  // xTaskCreatePinnedToCore(
+  //   DW3000_Module,    // Function to run
+  //   "DW3000_Module",  // Name of task
+  //   4096,             // Stack size (words, not bytes)
+  //   &Bot_ID,          // Parameter to pass
+  //   1,                // Priority (1 is usually fine)
+  //   NULL,             // Task handle (not used here)
+  //   0                 // Core to pin to (0 = PRO core)
+  // );
 
   // Add base robot, with starting positions and distance must always be 0
-  swarm.update_robot(Bot_ID, xStart, yStart, 0);  // set base address at origin
+  // swarm.update_robot(Bot_ID, xStart, yStart, 0);  // set base address at origin
 
   // This will automatically create a new robot if it doesn't exist, or update it if it has existed
   // swarm.update_robot(0xAA, 2, 2, 2.82);
@@ -168,7 +170,7 @@ void DW3000_Module(void* parameter) {
         // Serial.println(distance);
         int8_t dw_pos[3], dw_velocity[3];
         uint16_t address = dwm3000.getRobotInfo(dw_pos, dw_velocity);
-        swarm.update_robot(address, dw_pos[0], dw_pos[1], (distance > 0 && distance < 50)? distance : -1);
+        swarm.update_robot(address, dw_pos[0], dw_pos[1], (distance > 0 && distance < 50) ? distance : -1);
         // Serial.print("New address found: ");
         // Serial.println(address, HEX);
       }
@@ -180,76 +182,191 @@ void DW3000_Module(void* parameter) {
 
 
 void loop() {
-  Gyro_update();
-  // notify();
-  // PS4_move(stick_LX, stick_LY, stick_RX, stick_RY);
 
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  // Update base position based on all info
+  delay(2000);
+  MotionParameters motionParamsX = frontLeftMotor.calculateTrapezoidalProfile(-1000, 0, 0, 400);   // X movement
+  MotionParameters motionParamsY = frontRightMotor.calculateTrapezoidalProfile(-1000, 0, 0, 400);  // Y movement
 
-  // Print all robot information
-  swarm.print_Robot_Swarm();
+  // Reset all PIDs
+  frontLeftMotor.resetPID();
+  frontRightMotor.resetPID();
+  backLeftMotor.resetPID();
+  backRightMotor.resetPID();
 
-  // double target_x = 1;
-  // double target_y = 1;
-  // float angle = 0;
+  float targetAngle = MPU_Z_angle();
 
-  // float LX_vector = map(100*(target_x - real_pos[0]), -128, 127, -10000, 10000) / 100;
-  // float LY_vector = map(100*(target_y - real_pos[1]), -127, 128, -10000, 10000) / 100;
-  // // float angle;
-  // if (LY_vector == 0 && LX_vector > 0) angle = PI / 2;
-  // else if (LY_vector == 0 && LX_vector < 0) angle = 3 * PI / 2;
-  // else if (LY_vector == 0 && LX_vector == 0) angle = 0;
-  // else angle = atan(abs(LX_vector) / abs(LY_vector));
+  // Run the combined profile
+  while ((motionParamsX.time_step < motionParamsX.T) || (motionParamsY.time_step < motionParamsY.T)) {
+    // followXYProfile(&motionParamsX, &motionParamsY);  // 1.0, 1.0 are direction coefficients
+    followXYProfile(&motionParamsX, &motionParamsY, targetAngle);  // 1.0, 1.0 are direction coefficients
+    Gyro_update();
+  }
 
-  // if (LX_vector > 0 && LY_vector > 0) angle = angle;
-  // else if (LX_vector > 0 && LY_vector < 0) angle = PI - angle;
-  // else if (LX_vector < 0 && LY_vector < 0) angle = PI + angle;
-  // else if (LX_vector < 0 && LY_vector > 0) angle = 2 * PI - angle;
+  while (true) {
+    // Gyro_update();
 
-  // //Speed  (range of 0 to 100)
-  // float Speed_total_percent = PS4_LeftAnalogStickSpeed(500*(target_x - real_pos[0]), 500*(target_y - real_pos[1]));
+    // Print all robot information
+    // swarm.print_Robot_Swarm();
 
-  // int motor_Speeds[4];
-  // motor_Speeds[0] = map(sin(angle + (1 * PI) / 4) * Speed_total_percent * 100, -10000, 10000, -PWM_resolution_max_value, PWM_resolution_max_value);
-  // motor_Speeds[1] = map(sin(angle + (3 * PI) / 4) * Speed_total_percent * 100, -10000, 10000, -PWM_resolution_max_value, PWM_resolution_max_value);
-  // motor_Speeds[2] = map(sin(angle + (3 * PI) / 4) * Speed_total_percent * 100, -10000, 10000, -PWM_resolution_max_value, PWM_resolution_max_value);
-  // motor_Speeds[3] = map(sin(angle + (1 * PI) / 4) * Speed_total_percent * 100, -10000, 10000, -PWM_resolution_max_value, PWM_resolution_max_value);
-  // // motor_Speeds[0] = 255;
-  // // motor_Speeds[1] = 255;
-  // // motor_Speeds[2] = 255;
-  // // motor_Speeds[3] = 255;
+    frontLeftMotor.setMotorPWM(0);
+    frontRightMotor.setMotorPWM(0);
+    backLeftMotor.setMotorPWM(0);
+    backRightMotor.setMotorPWM(0);
 
-  // Serial.print(real_pos[0]);
-  // Serial.print("  ");
-  // Serial.print(real_pos[1]);
-  // Serial.print("  ");
-  // Serial.print(angle);
-  // Serial.print("  ");
-  // Serial.print(Speed_total_percent);
-  // Serial.print("  ");
+    // notify();
+    // PS4_move(stick_LX, stick_LY, stick_RX, stick_RY);
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Update base position based on all info
+    // double target_x = 1;
+    // double target_y = 1;
+    // float angle = 0;
 
 
-  // Serial.print(motor_Speeds[0]);
-  // Serial.print("  ");
-  // Serial.print(motor_Speeds[1]);
-  // Serial.print("  ");
-  // Serial.print(motor_Speeds[2]);
-  // Serial.print("  ");
-  // Serial.print(motor_Speeds[3]);
-  // Serial.println("  ");
+    // Serial.print(real_pos[0]);
+    // Serial.print("  ");
+    // Serial.print(real_pos[1]);
+    // Serial.print("  ");
+    // Serial.print(angle);
+    // Serial.print("  ");
+    // Serial.print(Speed_total_percent);
+    // Serial.print("  ");
 
-  // Serial.print("Gyro z: ");
-  // Serial.print(MPU_Z_angle());
-  // Serial.println("");
 
-  //apply turn Speed to allow control using right analog stick
-  // motor_Speed[0] = motor_Speed[0] + turn_Speed;
-  // motor_Speed[1] = motor_Speed[1] - turn_Speed;
-  // motor_Speed[2] = motor_Speed[2] + turn_Speed;
-  // motor_Speed[3] = motor_Speed[3] - turn_Speed;
+    // Serial.print(motor_Speeds[0]);
+    // Serial.print("  ");
+    // Serial.print(motor_Speeds[1]);
+    // Serial.print("  ");
+    // Serial.print(motor_Speeds[2]);
+    // Serial.print("  ");
+    // Serial.print(motor_Speeds[3]);
+    // Serial.println("  ");
 
-  // run all motors with according speeds
-  // if(fixed_base==false)  motor(motor_Speeds);
-  // vTaskDelay(100);  // Suspend main loop
+    // Serial.print("Gyro z: ");
+    // Serial.print(MPU_Z_angle());
+    // Serial.println("");
+
+    //apply turn Speed to allow control using right analog stick
+    // motor_Speed[0] = motor_Speed[0] + turn_Speed;
+    // motor_Speed[1] = motor_Speed[1] - turn_Speed;
+    // motor_Speed[2] = motor_Speed[2] + turn_Speed;
+    // motor_Speed[3] = motor_Speed[3] - turn_Speed;
+
+    // run all motors with according speeds
+    // if(fixed_base==false)  motor(motor_Speeds);
+    // vTaskDelay(100);  // Suspend main loop
+  }
+}
+
+
+void followXYProfile(MotionParameters* motionParamsX, MotionParameters* motionParamsY, float targetAngle) {
+  static float initialAngle = NAN;
+  static float totalRotation = 0;
+
+  int motor_update_interval = 50;
+  unsigned long currentTime = millis();
+  if ((currentTime - motionParamsX->prev_time) >= motor_update_interval) {
+    motionParamsX->prev_time = currentTime;
+    motionParamsY->prev_time = currentTime;
+
+
+    // Initialize target angle tracking
+    if (!isnan(targetAngle) && isnan(initialAngle)) {
+      initialAngle = MPU_Z_angle();
+      totalRotation = 0;
+    }
+
+
+    if (motionParamsX->time_step <= motionParamsX->T || motionParamsY->time_step <= motionParamsY->T) {
+      // Calculate X component velocity
+      float current_Vx = 0;
+      if (motionParamsX->time_step <= motionParamsX->T) {
+        if (motionParamsX->time_step < motionParamsX->ta) {
+          current_Vx = motionParamsX->acceleration * (motionParamsX->time_step / 1000);
+        } else if ((motionParamsX->time_step >= motionParamsX->ta) && (motionParamsX->time_step <= motionParamsX->tcf)) {
+          current_Vx = motionParamsX->velocity;
+        } else if (motionParamsX->time_step > motionParamsX->tcf) {
+          current_Vx = motionParamsX->velocity - ((motionParamsX->time_step / 1000) - (motionParamsX->tcf / 1000)) * motionParamsX->deceleration;
+        }
+        motionParamsX->time_step += motor_update_interval;
+      }
+
+      // Calculate Y component velocity
+      float current_Vy = 0;
+      if (motionParamsY->time_step <= motionParamsY->T) {
+        if (motionParamsY->time_step < motionParamsY->ta) {
+          current_Vy = motionParamsY->acceleration * (motionParamsY->time_step / 1000);
+        } else if ((motionParamsY->time_step >= motionParamsY->ta) && (motionParamsY->time_step <= motionParamsY->tcf)) {
+          current_Vy = motionParamsY->velocity;
+        } else if (motionParamsY->time_step > motionParamsY->tcf) {
+          current_Vy = motionParamsY->velocity - ((motionParamsY->time_step / 1000) - (motionParamsY->tcf / 1000)) * motionParamsY->deceleration;
+        }
+        motionParamsY->time_step += motor_update_interval;
+      }
+      // Calculate rotation correction if target angle is specified
+      float rotationSpeed = 0;
+      if (!isnan(targetAngle)) {
+        float currentAngle = MPU_Z_angle();
+        float angleError = targetAngle - currentAngle;
+
+        // 1. Normalize angle error to [-180, 180]
+        while (angleError > 180) angleError -= 360;
+        while (angleError < -180) angleError += 360;
+
+        // 2. Add deadband to prevent jitter (adjust as needed)
+        const float deadband = 2.0f;  // degrees
+        if (fabs(angleError) < deadband) {
+          angleError = 0;
+        }
+
+        // 3. More aggressive control parameters
+        const float rotationP = 10.0f;          // Increased from 0.1f
+        const float maxRotationSpeed = 400.0f;  // Your max system speed (mm/s)
+        const float WHEELBASE_RADIUS = 60.0f;   // Example value (mm) - measure your robot!
+
+        // 4. Calculate raw rotation speed (deg/s to mm/s conversion)
+        rotationSpeed = angleError * rotationP;
+
+        // 5. Apply non-linear response for better control
+        if (fabs(angleError) > 10.0f) {  // Aggressive correction for large errors
+          rotationSpeed *= 1.5f;
+        }
+
+        // 6. Final constraints
+        rotationSpeed = constrain(rotationSpeed, -maxRotationSpeed, maxRotationSpeed);
+
+        // Debug output
+        Serial.print("AngleErr: ");
+        Serial.print(angleError);
+        Serial.print("° | RotSpeed: ");
+        Serial.print(rotationSpeed);
+        Serial.println(" mm/s");
+      }
+
+      // Combine X, Y and rotation components for each wheel
+      // Mecanum wheel equations with rotation:
+      // FL: Vx - Vy + Vrot
+      // FR: Vx + Vy - Vrot
+      // BL: Vx + Vy + Vrot
+      // BR: Vx - Vy - Vrot
+      // Serial.println(rotationSpeed);
+      float fl_speed = current_Vx + current_Vy + rotationSpeed;
+      float fr_speed = current_Vx - current_Vy - rotationSpeed;
+      float bl_speed = current_Vx - current_Vy + rotationSpeed;
+      float br_speed = current_Vx + current_Vy - rotationSpeed;
+
+
+      // Set speeds for each motor
+      frontLeftMotor.setSpeed(fl_speed, 0);  // Note: acceleration might need adjustment
+      frontRightMotor.setSpeed(fr_speed, 0);
+      backLeftMotor.setSpeed(bl_speed, 0);
+      backRightMotor.setSpeed(br_speed, 0);
+    } else {
+      // Stop all motors when both profiles are complete
+      frontLeftMotor.stopMotor();
+      frontRightMotor.stopMotor();
+      backLeftMotor.stopMotor();
+      backRightMotor.stopMotor();
+    }
+  }
 }

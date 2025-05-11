@@ -4,7 +4,7 @@
 // Encoder parameters
 #define wheelRadius 24.0      //48mm diameter wheel
 #define MAX_ACCELERATION 500  // mm/s/s
-#define MAX_VELOCITY 1000     // mm/s
+#define MAX_VELOCITY 600      // mm/s
 
 // Motor & encoder parameter
 #define PWMResolution 12
@@ -12,7 +12,7 @@
 #define encoder_tick_per_rev 4096
 
 // System speed
-#define motor_update_freq 20  // 100Hz -> update time -> 10ms
+#define motor_update_freq 50  // 50Hz -> update time -> 20ms
 
 typedef struct MotionParameters {
   float ta;
@@ -23,6 +23,7 @@ typedef struct MotionParameters {
   float s_req;
   float velocity;
   float acceleration;
+  float deceleration;
   float time_step;
   int32_t prev_time;
 
@@ -52,6 +53,15 @@ private:
   int encoder_counter = 0;
 
   unsigned long enc_last_update_time, enc_current_time = 0;
+  
+  float current_timestep_velocity = 0;
+  float current_timestep_acceleration = 0;
+  
+
+  double err = 0;
+  double measured_velocity = 0;
+  
+  int64_t _lastPosition, _position = 0;
 
 
 
@@ -72,9 +82,6 @@ public:
   double PID_Kp = 0;
   double PID_Ki = 0;
   double PID_Kd = 0;
-
-  double err = 0;
-  double measured_velocity = 0;
 
   ////////////////////////////////////////////// Setup ////////////////////////////////////////////////////////////////////
   MotorControl(uint pin1, uint pin2, uint analogPin, bool encDirection)
@@ -98,12 +105,12 @@ public:
     Tm = 0.035;
     FF_K_offset = 913;
     FF_K_velocity = 4.5;
-    FF_K_accel = 4096 * Tm;  //max voltage over max acceleration, accel = 1/tau
+    FF_K_accel = 3;//4096 * Tm;  //max voltage over max acceleration, accel = 1/tau
 
     PID_BIAS = 0;
-    PID_Kp = 10;  // (leftMotor.Tm * 64.0) / (leftMotor.FF_K_velocity * (double)sqrt(2.0)*sqrt(2.0) * Td * Td);
-    PID_Ki = 1;
-    PID_Kd = 0.04;  //(8 * leftMotor.Tm - Td) / (Td * leftMotor.FF_K_velocity);
+    PID_Kp = 20;  // (leftMotor.Tm * 64.0) / (leftMotor.FF_K_velocity * (double)sqrt(2.0)*sqrt(2.0) * Td * Td);
+    PID_Ki = 0.1;
+    PID_Kd = 0.005;  //(8 * leftMotor.Tm - Td) / (Td * leftMotor.FF_K_velocity);
   }
   // // Write PWM speed to motor
   void setMotorPWM(int speed) {
@@ -125,7 +132,6 @@ public:
   //////////////////////////////////////////////// Encoder feedback //////////////////////////////////////////////////////////////////
   // Encoder distance
   int64_t updateEncoder() {
-    static int64_t _lastPosition, _position = 0;
 
     // enc_current_time = millis();
     // if (enc_current_time - enc_last_update_time >= motor_update_interval) {
@@ -154,6 +160,7 @@ public:
   // Feedforward - https://youtu.be/qKoPRacXk9Q?si=ahXkdiADK6ndN237
   double feedForward_Control(double velocity, double acceleration) {
     double pwm_FF = (velocity > 0) ? FF_K_offset : -FF_K_offset;
+    // double pwm_FF = FF_K_offset;
     pwm_FF += FF_K_velocity * velocity + FF_K_accel * acceleration;
     return pwm_FF;
   }
@@ -194,6 +201,8 @@ public:
       PWM_signal += feedForward_Control(target_velocity, acceleration);
       PWM_signal += PID_Control(target_velocity, measured_velocity);
 
+      // Serial.print(acceleration);
+      // Serial.print(" , ");
       // Serial.print(target_velocity);
       // Serial.print(" , ");
       // Serial.print(measured_velocity);
@@ -215,144 +224,139 @@ public:
 
   //////////////////////////////////////////////// Velocity profile //////////////////////////////////////////////////////////////////
 
+  MotionParameters calculateTrapezoidalProfile(float Total_distance, float Initialvelocity = 0, float Finalvelocity = 0,float Maxvelocity=MAX_VELOCITY,  float Acceleration = MAX_ACCELERATION, float Deceleration = MAX_ACCELERATION) {
+    /*
+          This function sets up the Trapezoidal velocity profile by calculating the shape of the graph by using the distance, max_velocity and max_acceleration
+          assumption:
+          1) acceleration and deceleration is equal (time for accel and decel are the same)
+          2) 3 zones are available, Accel Zone, Steady State Zone, Decel Zone
+          3) when possible, it will form trapezoidal profile, else it will reach as high velocity as it can before decel (triangle profile)
+          4) Start and End velocities are 0
 
-  // MotionParameters calculateTrapezoidalProfile(float distance, float max_velocity, float max_acceleration) {
-  //     /*
-  //         This function sets up the Trapezoidal velocity profile by calculating the shape of the graph by using the distance, max_velocity and max_acceleration
-  //         assumption:
-  //         1) acceleration and deceleration is equal (time for accel and decel are the same)
-  //         2) 3 zones are available, Accel Zone, Steady State Zone, Decel Zone
-  //         3) when possible, it will form trapezoidal profile, else it will reach as high velocity as it can before decel (triangle profile)
-  //         4) Start and End velocities are 0
+          case 1 (triangle): if distance is less than area needed for both accel and decel
+          case 2 (trapezoidal): when enough area for accel and decel, add max velocity period in middle, as steady state zone
+      */
 
-  //         case 1 (triangle): if distance is less than area needed for both accel and decel
-  //         case 2 (trapezoidal): when enough area for accel and decel, add max velocity period in middle, as steady state zone
-  //     */
+    MotionParameters motionParams;
+    
+    // Determine direction (1 for forward, -1 for backward)
+    float direction = (Total_distance >= 0) ? 1.0f : -1.0f;
+    float abs_distance = fabs(Total_distance);
+    float abs_max_vel = fabs(Maxvelocity) * direction; // Signed max velocity
+    
+    // Step 1: Acceleration phase
+    float Acceleration_time = (abs_max_vel - Initialvelocity) / Acceleration;
+    Acceleration_time = fmax(Acceleration_time, 0); // Ensure non-negative
+    float Distance_duringacceleration = Initialvelocity * Acceleration_time + 0.5f * Acceleration * Acceleration_time * Acceleration_time;
+    
+    // Step 2: Deceleration phase
+    float Deceleration_time = (abs_max_vel - Finalvelocity) / Deceleration;
+    Deceleration_time = fmax(Deceleration_time, 0); // Ensure non-negative
+    float Distance_duringdeceleration = abs_max_vel * Deceleration_time - 0.5f * Deceleration * Deceleration_time * Deceleration_time;
+    
+    // Step 3: Constant velocity phase
+    float Remaining_Distance = abs_distance - (Distance_duringacceleration + Distance_duringdeceleration);
+    float Constant_Accelerationtime = (Remaining_Distance > 0) ? (Remaining_Distance / fabs(abs_max_vel)) : 0;
+    
+    float t_start_constant = Acceleration_time;
+    float t_end_constant = t_start_constant + Constant_Accelerationtime;
+    float t_end_deceleration = t_end_constant + Deceleration_time;
+    
+    // Save parameters in struct (convert to ms)
+    motionParams.ta = Acceleration_time * 1000.0f;
+    motionParams.tc = Constant_Accelerationtime * 1000.0f;
+    motionParams.tcf = t_end_constant * 1000.0f;
+    motionParams.T = t_end_deceleration * 1000.0f;
+    
+    // Store signed values
+    motionParams.Vm = abs_max_vel;
+    motionParams.s_req = Total_distance; // Signed distance
+    motionParams.velocity = abs_max_vel;
+    motionParams.acceleration = Acceleration * direction; // Signed acceleration
+    motionParams.deceleration = Deceleration * direction; // Signed deceleration
+    
+    motionParams.prev_time = millis();
+    motionParams.time_step = 0;
+    
 
-  //     MotionParameters motionParams;
-  //     motionParams.s_req = distance;
-  //     if (max_acceleration > MAX_ACCELERATION)
-  //         max_acceleration = MAX_ACCELERATION;
-  //     if (max_velocity > MAX_VELOCITY)
-  //         max_velocity = MAX_VELOCITY;
+    // Debug output
+    // Serial.print("ta: ");
+    // Serial.print(motionParams.ta);
+    // Serial.print("  tc: ");
+    // Serial.print(motionParams.tc);
+    // Serial.print("  tcf: ");
+    // Serial.print(motionParams.tcf);
+    // Serial.print("  T: ");
+    // Serial.print(motionParams.T);
+    // Serial.print("  Vm: ");
+    // Serial.println(motionParams.Vm);
 
-  //         motionParams.velocity = max_velocity;
-  //         motionParams.acceleration = max_acceleration;
-
-  //     motionParams.Vm = sqrt(motionParams.s_req * max_acceleration);
-  //     if (motionParams.Vm <= max_velocity){
-  //         motionParams.ta = motionParams.Vm / max_acceleration;
-  //         motionParams.T = 2 * motionParams.ta;
-  //         motionParams.tc = 0;
-  //         motionParams.tcf = 0;
-  //     }else{
-  //         motionParams.ta = max_velocity / max_acceleration;
-  //         motionParams.tc = motionParams.s_req / max_velocity - motionParams.ta;
-  //         motionParams.T = 2 * motionParams.ta + motionParams.tc;
-  //         motionParams.tcf = motionParams.T - motionParams.ta;
-  //     }
-
-  //     // Convert to ms, since we use millis() function to compare time
-  //     motionParams.T*=1000;
-  //     motionParams.ta*=1000;
-  //     motionParams.tc*=1000;
-  //     motionParams.tcf*=1000;
-
-  //     // Serial.print(motionParams.velocity);
-  //     // Serial.print("  ");
-  //     // Serial.print(motionParams.acceleration);
-  //     // Serial.print("  ");
-  //     // Serial.print(motionParams.T);
-  //     // Serial.print("  ");
-  //     // Serial.print(motionParams.ta);
-  //     // Serial.print("  ");
-  //     // Serial.print(motionParams.tc);
-  //     // Serial.print("  ");
-  //     // Serial.print(motionParams.Vm);
-  //     // Serial.println("  ");
-
-  //     // motionParams.velocity = max_velocity;
-  //     // motionParams.acceleration = max_acceleration;
-
-  //     motionParams.prev_time = millis();
-  //     motionParams.time_step = 0;
-  //     return motionParams;
-  // }
-
-  // float current_timestep_velocity = 0;
-  // float current_timestep_acceleration = 0;
-  // void followProfile(MotionParameters *motionParams){
-  //   /*
-  //       This function implements the motion profile, and calculates the velocity and acceleration
-  //       required at each timestep
-
-  //       The first if statement is there so that we do a control action every fixed amount of seconds
-  //       it enters the if statement every 2ms or watever we set.
-
-  //       Once the duration of the control is over ie reached the end there is an additional leyway for
-  //       pid to settle any remaining error, but as of now there is no need for such.
-
-  //       In addition, the motion profile takes into account the maximum the motor can do, so the PID
-  //       wont be requested a "harsh step", rather a gentler slope to follow.
-  //   */
-  //   unsigned long currentTime = millis();
-  //   if ( (currentTime - motionParams->prev_time) >=  motor_update_interval){
-  //       motionParams->prev_time = currentTime;
-
-  //     // Serial.print(motionParams->time_step);
-  //     // Serial.print("  ");
-  //     // Serial.print(motionParams->T*1000);
-  //     // Serial.println("  ");
-
-  //       if (motionParams->time_step <= motionParams->T){
-
-  //           // Acceleration Zone
-  //           if (motionParams->time_step < motionParams->ta){
-  //               current_timestep_velocity = motionParams->acceleration * (motionParams->time_step/1000);
-  //               current_timestep_acceleration = motionParams->acceleration;
-
-  //           // // Overshooting condition
-  //           // } else if (motionParams->Vm <= motionParams->velocity){
-  //           //     current_timestep_velocity = motionParams->Vm - motionParams->acceleration * ((motionParams->time_step/1000) - (motionParams->ta/1000));
-  //           //     current_timestep_acceleration = -motionParams->acceleration;
-
-  //           // Steady State Zone
-  //           } else if ((motionParams->time_step >= motionParams->ta) && (motionParams->time_step <= motionParams->tcf)){
-  //               current_timestep_velocity = motionParams->velocity;
-  //               current_timestep_acceleration = 0;
-
-  //           // Deceleration Zone
-  //           } else if (motionParams->time_step > motionParams->tcf){
-  //               current_timestep_velocity = motionParams->velocity - ((motionParams->time_step/1000) - (motionParams->tcf/1000)) * motionParams->acceleration;
-  //               current_timestep_acceleration = -motionParams->acceleration;
-  //           }
-
-  //           // Update the control blocks with new control signals.
-  //           motionParams->time_step += motor_update_interval;
-  //           // Serial.print(current_timestep_velocity);
-  //           // Serial.print("  ");
-  //           // Serial.print(current_timestep_acceleration);
-  //           // Serial.println("  ");
-  //           setSpeed(current_timestep_velocity, current_timestep_acceleration);
-
-  //       } else {
-  //           // To reach here we have passed the full duration of the feed forward action, we can stop the motor now.
-  //           stopMotor();
-  //       }
-  //   }
-
-  // }
+    return motionParams;
+  }
 
 
-  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  void followProfile(MotionParameters *motionParams) {
+    /*
+        This function implements the motion profile, and calculates the velocity and acceleration
+        required at each timestep
+
+        The first if statement is there so that we do a control action every fixed amount of seconds
+        it enters the if statement every 2ms or watever we set.
+
+        Once the duration of the control is over ie reached the end there is an additional leyway for
+        pid to settle any remaining error, but as of now there is no need for such.
+
+        In addition, the motion profile takes into account the maximum the motor can do, so the PID
+        wont be requested a "harsh step", rather a gentler slope to follow.
+    */
+    unsigned long currentTime = millis();
+    if ((currentTime - motionParams->prev_time) >= motor_update_interval) {
+      motionParams->prev_time = currentTime;
+
+      // Serial.print(motionParams->time_step);
+      // Serial.print("  ");
+      // Serial.print(motionParams->T*1000);
+      // Serial.println("  ");
+
+      if (motionParams->time_step <= motionParams->T) {
+
+        // Acceleration Zone
+        if (motionParams->time_step < motionParams->ta) {
+          current_timestep_velocity = motionParams->acceleration * (motionParams->time_step / 1000);
+          current_timestep_acceleration = motionParams->acceleration;
+
+          // // Overshooting condition
+          // } else if (motionParams->Vm <= motionParams->velocity){
+          //     current_timestep_velocity = motionParams->Vm - motionParams->acceleration * ((motionParams->time_step/1000) - (motionParams->ta/1000));
+          //     current_timestep_acceleration = -motionParams->acceleration;
+
+          // Steady State Zone
+        } else if ((motionParams->time_step >= motionParams->ta) && (motionParams->time_step <= motionParams->tcf)) {
+          current_timestep_velocity = motionParams->velocity;
+          current_timestep_acceleration = 0;
+
+          // Deceleration Zone
+        } else if (motionParams->time_step > motionParams->tcf) {
+          current_timestep_velocity = motionParams->velocity - ((motionParams->time_step / 1000) - (motionParams->tcf / 1000)) * motionParams->deceleration;
+          current_timestep_acceleration = -motionParams->deceleration;
+        }
+
+        // Update the control blocks with new control signals.
+        motionParams->time_step += motor_update_interval;
+        // Serial.print(current_timestep_velocity);
+        // Serial.print("  ");
+        // Serial.print(current_timestep_acceleration);
+        // Serial.println("  ");
+        setSpeed(current_timestep_velocity, current_timestep_acceleration);
+
+      } else {
+        // To reach here we have passed the full duration of the feed forward action, we can stop the motor now.
+        stopMotor();
+      }
+    }
+  }
 };
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 
-// MotorControl frontRightMotor(
-//   26,    // motorPin1
-//   27,    // motorPin2
-//   25,    // motorPWM
-//   35,    // analogPin
-//   1      // Base direction for encoder
-// );
