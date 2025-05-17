@@ -18,11 +18,12 @@ private:
 
     double filtered_distance;  // Kalman-filtered distance
     Kalman distance_filter;    // Individual Kalman filter for this robot
+    
 
 
     Robot(int16_t addr)
       : address(addr), distance(0.0), filtered_distance(0.0),
-        distance_filter(0.02, 0.02, 0.1) {
+        distance_filter(0.2, 0.2, 0.1) {
       position[0] = position[1] = position[2] = 0.0;
       velocity[0] = velocity[1] = velocity[2] = 0.0;
       update_timestamp();
@@ -229,7 +230,7 @@ public:
   }
 
   // Update target robot's position using trilateration and automatically update timestamp
-  bool update_base_position(int16_t target_address, double pos[3]) {
+  bool update_base_position(int16_t target_address, float pos[3]) {
     // First check if the target exists
     auto target_it = robots.find(target_address);
     if (target_it == robots.end()) {
@@ -274,7 +275,7 @@ public:
   }
 
 
-  void update_robot(int16_t address, double x, double y, double new_distance) {
+  void update_robot(int16_t address, double x, double y, float new_distance) {
     // First remove any stale robots
     remove_stale_robots();
 

@@ -12,8 +12,8 @@
 class DWM3000 {
 public:
   // Constructor
-  DWM3000(int rstPin, int irqPin, int ssPin, uint16_t botId, bool debug = false)
-    : PIN_RST(rstPin), PIN_IRQ(irqPin), PIN_SS(ssPin), Bot_ID(botId), dw3000_debug(debug) {
+  DWM3000(int rstPin, int irqPin, int ssPin, uint16_t botId, uint16_t Antenna_Delay = 16385, bool debug = false)
+    : PIN_RST(rstPin), PIN_IRQ(irqPin), PIN_SS(ssPin), Bot_ID(botId), TX_ANT_DLY(Antenna_Delay), RX_ANT_DLY(Antenna_Delay), dw3000_debug(debug) {
   }
 
   // Initialize the DWM3000 module
@@ -22,21 +22,21 @@ public:
   }
 
   // Tag functionality - get distance to another module
-  double getDistance(uint16_t receiver_id, int8_t pos[3], int8_t vel[3]) {
+  double getDistance(uint16_t receiver_id, float pos[3], float vel[3]) {
     setAnchorMode(false);
     Tag_set_send_mode(Bot_ID, receiver_id, pos, vel);
     return Tag_waiting_for_response(Bot_ID, receiver_id);
   }
 
   // Anchor functionality - wait for and process incoming messages
-  double processIncoming(int8_t pos[3], int8_t vel[3]) {
+  double processIncoming(float pos[3], float vel[3]) {
     setAnchorMode(true);
     return Anchor_waiting_for_response(Bot_ID, pos, vel);
   }
 
   // Get last received robot info
   // return distance, and update positions and velocity arrays
-  uint16_t getRobotInfo(int8_t position[3], int8_t velocity[3]) {
+  uint16_t getRobotInfo(float position[3], float velocity[3]) {
     for (int i = 0; i < 3; i++) {
       position[i] = read_position[i];
       velocity[i] = read_velocity[i];
@@ -57,11 +57,11 @@ private:
 
   // Configuration
   const uint16_t Bot_ID;
+  const uint16_t TX_ANT_DLY;
+  const uint16_t RX_ANT_DLY;
   const bool dw3000_debug = true;
 
   // Constants
-  static constexpr uint16_t TX_ANT_DLY = 16385;
-  static constexpr uint16_t RX_ANT_DLY = 16385;
   static constexpr uint8_t ALL_MSG_COMMON_LEN = 5;
   static constexpr uint8_t ALL_MSG_SN_IDX = 2;
   static constexpr uint8_t RESP_MSG_POLL_RX_TS_IDX = 10;
@@ -75,8 +75,8 @@ private:
   uint8_t rx_buffer[34];
   uint32_t status_reg = 0;
   bool anchor = true;
-  int8_t read_position[3] = { 0, 0, 0 };
-  int8_t read_velocity[3] = { 0, 0, 0 };
+  float read_position[3] = { 0, 0, 0 };
+  float read_velocity[3] = { 0, 0, 0 };
   uint16_t last_receiver_id = 0;
 
   // Configuration structures
@@ -227,7 +227,7 @@ private:
   }
 
   // Tag functionality
-  void Tag_set_send_mode(uint16_t sender_id, uint16_t receiver_id, int8_t pos[3], int8_t vel[3]) {
+  void Tag_set_send_mode(uint16_t sender_id, uint16_t receiver_id, float pos[3], float vel[3]) {
     dwt_forcetrxoff();  // Clean stop any ongoing operations
 
     // Configure for tag mode
@@ -242,13 +242,25 @@ private:
     frame_seq_nb++;
     uint8_t tx_msg[18];
     generate_msg(tx_msg, frame_seq_nb, receiver_id, sender_id, 0xE0);
-    tx_msg[10] = pos[0];
-    tx_msg[11] = pos[1];
-    tx_msg[12] = pos[2];
+    // tx_msg[10] = pos[0];
+    // tx_msg[11] = pos[1];
+    // tx_msg[12] = pos[2];
 
-    tx_msg[13] = vel[0];
-    tx_msg[14] = vel[1];
-    tx_msg[15] = vel[2];
+    // tx_msg[13] = vel[0];
+    // tx_msg[14] = vel[1];
+    // tx_msg[15] = vel[2];
+
+    // Add compressed pos[] and vel[]
+    for (int i = 0; i < 3; i++) {
+      int16_t p = (int16_t)(pos[i] * 100);  // e.g., 1.23m → 123
+      // int16_t v = (int16_t)(vel[i] * 100);  // e.g., 0.456 m/s → 456
+
+      tx_msg[10 + i * 2] = (p >> 8) & 0xFF;
+      tx_msg[11 + i * 2] = p & 0xFF;
+
+      // tx_msg[16 + i * 2] = (v >> 8) & 0xFF;
+      // tx_msg[17 + i * 2] = v & 0xFF;
+    }
 
     setTransmitData(sizeof(tx_msg), tx_msg, 1, 1);
     startTransmit(false, true);
@@ -318,10 +330,24 @@ private:
           Serial.println("Failed to schedule delayed TX, too late!");
         }
 
+        // for (int i = 0; i < 3; i++) {
+        //   read_position[i] = rx_buffer[10 + i];
+        //   read_velocity[i] = rx_buffer[13 + i];
+        // }
+
+        // Obtain pos[] info
+        int16_t raw_pos, raw_vel;
         for (int i = 0; i < 3; i++) {
-          read_position[i] = rx_buffer[10 + i];
-          read_velocity[i] = rx_buffer[13 + i];
+          // Decompress position (stored in bytes 10,11,12,13,14,15)
+          raw_pos = (int16_t)((rx_buffer[10 + i * 2] << 8) | rx_buffer[11 + i * 2]);
+          read_position[i] = (float)raw_pos / 100.0f;  // cm precision → meters
+
+          // // Decompress velocity (stored in bytes 16,17,18,19,20,21)
+          // raw_vel = (int16_t)((rx_buffer[16 + i * 2] << 8) | rx_buffer[17 + i * 2]);
+          // read_velocity[i] = (float)raw_vel / 100.0f;  // mm/s precision → m/s
         }
+
+
       } else if (dw3000_debug) {
         Serial.println("Ignored");
       }
@@ -333,7 +359,7 @@ private:
     return distance;
   }
 
-  double Anchor_waiting_for_response(uint16_t sender_id, int8_t pos[3], int8_t vel[3]) {
+  double Anchor_waiting_for_response(uint16_t sender_id, float pos[3], float vel[3]) {
     const unsigned long timeout_ms = 50;  // 50ms timeout
     unsigned long start_time = millis();
     double distance = -1;
@@ -370,7 +396,7 @@ private:
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  double Anchor_process_received_message(uint16_t sender_id, int8_t pos[3], int8_t vel[3]) {
+  double Anchor_process_received_message(uint16_t sender_id, float pos[3], float vel[3]) {
     uint32_t frame_len;
     double distance = -1;
 
@@ -409,13 +435,24 @@ private:
 
           uint8_t tx_msg[22];
           generate_msg(tx_msg, frame_seq_nb, receiver_id, sender_id, 0xE1);
-          tx_msg[10] = pos[0];
-          tx_msg[11] = pos[1];
-          tx_msg[12] = pos[2];
+          // tx_msg[10] = pos[0];
+          // tx_msg[11] = pos[1];
+          // tx_msg[12] = pos[2];
 
-          tx_msg[13] = vel[0];
-          tx_msg[14] = vel[1];
-          tx_msg[15] = vel[2];
+          // tx_msg[13] = vel[0];
+          // tx_msg[14] = vel[1];
+          // tx_msg[15] = vel[2];
+          // Add compressed pos[] and vel[]
+          for (int i = 0; i < 3; i++) {
+            int16_t p = (int16_t)(pos[i] * 100);  // e.g., 1.23m → 123
+            // int16_t v = (int16_t)(vel[i] * 100);  // e.g., 0.456 m/s → 456
+
+            tx_msg[10 + i * 2] = (p >> 8) & 0xFF;
+            tx_msg[11 + i * 2] = p & 0xFF;
+
+            // tx_msg[16 + i * 2] = (v >> 8) & 0xFF;
+            // tx_msg[17 + i * 2] = v & 0xFF;
+          }
 
           /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -430,13 +467,25 @@ private:
           // Clear TX frame sent event.
           dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
 
-          read_position[0] = rx_buffer[10];
-          read_position[1] = rx_buffer[11];
-          read_position[2] = rx_buffer[12];
+          // read_position[0] = rx_buffer[10];
+          // read_position[1] = rx_buffer[11];
+          // read_position[2] = rx_buffer[12];
 
-          read_velocity[0] = rx_buffer[13];
-          read_velocity[1] = rx_buffer[14];
-          read_velocity[2] = rx_buffer[15];
+          // read_velocity[0] = rx_buffer[13];
+          // read_velocity[1] = rx_buffer[14];
+          // read_velocity[2] = rx_buffer[15];
+
+          // Obtain pos[] info
+          int16_t raw_pos, raw_vel;
+          for (int i = 0; i < 3; i++) {
+            // Decompress position (stored in bytes 10,11,12,13,14,15)
+            raw_pos = (int16_t)((rx_buffer[10 + i * 2] << 8) | rx_buffer[11 + i * 2]);
+            read_position[i] = (float)raw_pos / 100.0f;  // cm precision → meters
+
+            // // Decompress velocity (stored in bytes 16,17,18,19,20,21)
+            // raw_vel = (int16_t)((rx_buffer[16 + i * 2] << 8) | rx_buffer[17 + i * 2]);
+            // read_velocity[i] = (float)raw_vel / 100.0f;  // mm/s precision → m/s
+          }
           last_receiver_id = receiver_id;
 
 
@@ -494,13 +543,25 @@ private:
 
         if (rx_buffer[9] == 0xE0) {  // if msg not for me, just read address and position
           // Serial.println("new msg");
-          read_position[0] = rx_buffer[10];
-          read_position[1] = rx_buffer[11];
-          read_position[2] = rx_buffer[12];
+          // read_position[0] = rx_buffer[10];
+          // read_position[1] = rx_buffer[11];
+          // read_position[2] = rx_buffer[12];
 
-          read_velocity[0] = rx_buffer[13];
-          read_velocity[1] = rx_buffer[14];
-          read_velocity[2] = rx_buffer[15];
+          // read_velocity[0] = rx_buffer[13];
+          // read_velocity[1] = rx_buffer[14];
+          // read_velocity[2] = rx_buffer[15];
+
+          // Obtain pos[] info
+          int16_t raw_pos, raw_vel;
+          for (int i = 0; i < 3; i++) {
+            // Decompress position (stored in bytes 10,11,12,13,14,15)
+            raw_pos = (int16_t)((rx_buffer[10 + i * 2] << 8) | rx_buffer[11 + i * 2]);
+            read_position[i] = (float)raw_pos / 100.0f;  // cm precision → meters
+
+            // // Decompress velocity (stored in bytes 16,17,18,19,20,21)
+            // raw_vel = (int16_t)((rx_buffer[16 + i * 2] << 8) | rx_buffer[17 + i * 2]);
+            // read_velocity[i] = (float)raw_vel / 100.0f;  // mm/s precision → m/s
+          }
           last_receiver_id = receiver_id;
           distance = -2;
         }

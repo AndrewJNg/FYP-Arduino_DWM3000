@@ -9,23 +9,54 @@
 // #define fixed_base false
 #define fixed_base true
 
+
+
 // uint8_t Bot_ID = 0xAA;
 // #define DWM3000_RST 27
 // #define DWM3000_IRQ 34
 // #define DWM3000_SS 4
+// #define xStart -1.2
+// #define yStart -1.2
+
 
 // uint8_t Bot_ID = 0xBB;
 // #define DWM3000_RST 27
 // #define DWM3000_IRQ 34
 // #define DWM3000_SS 4
+// #define xStart 1.2
+// #define yStart 1.2
 
-uint8_t Bot_ID = 0xEE;
+uint8_t Bot_ID = 0xDD;
 #define DWM3000_RST 15
 #define DWM3000_IRQ 13
 #define DWM3000_SS 5
+#define xStart -0.4
+#define yStart -0.4
 
-#define xStart 1
-#define yStart 1
+// uint8_t Bot_ID = 0xEE;
+// #define DWM3000_RST 15
+// #define DWM3000_IRQ 13
+// #define DWM3000_SS 5
+// #define xStart 0.4
+// #define yStart -0.4
+
+// uint8_t Bot_ID = 0xFF;
+// #define DWM3000_RST 15
+// #define DWM3000_IRQ 13
+// #define DWM3000_SS 5
+// #define xStart -0.4
+// #define yStart 0.4
+
+// uint8_t Bot_ID = 0xF2;
+// #define DWM3000_RST 15
+// #define DWM3000_IRQ 13
+// #define DWM3000_SS 5
+// #define xStart 0.4
+// #define yStart 0.4
+
+int target_pos_x = xStart;
+int target_pos_y = yStart;
+int threshold_mm = 100;
 
 
 // Functional Macros
@@ -43,24 +74,30 @@ MotorControl frontRightMotor(4, 2, 39, 1);
 MotorControl backLeftMotor(27, 26, 35, 0);
 MotorControl backRightMotor(17, 16, 36, 1);
 
-DWM3000 dwm3000(DWM3000_RST, DWM3000_IRQ, DWM3000_SS, Bot_ID, false);
+DWM3000 dwm3000(DWM3000_RST, DWM3000_IRQ, DWM3000_SS, Bot_ID, 16370, false);
 RobotSwarm swarm(Bot_ID);
 
-int8_t positions[3] = { xStart, yStart, 0 };
-int8_t velocities[3] = { 0, 0, 0 };
-double real_pos[3], real_velocity[3];
+float positions[3] = { xStart, yStart, 0 };
+float velocities[3] = { 0, 0, 0 };
+float real_pos[3], real_velocity[3];
+bool is_moving = false;
+unsigned long last_move = 0;
 
-// void followXYProfile(MotionParameters* motionParamsX, MotionParameters* motionParamsY);
+float targetAngle = 0;
+Kalman kalmanX(0.2, 0.2, 0.1);  // tune values as needed
+Kalman kalmanY(0.2, 0.2, 0.1);
+
 void followXYProfile(MotionParameters* motionParamsX, MotionParameters* motionParamsY, float targetAngle);
 void setup() {
   Serial.begin(115200);
 
   // PS4_setup();
+
+  // Movement_setup
   frontLeftMotor.setupMotorSystem();
   frontRightMotor.setupMotorSystem();
   backLeftMotor.setupMotorSystem();
   backRightMotor.setupMotorSystem();
-  // Movement_setup();
   Gyro_setup();
 
   // while (!PS4.isConnected()) {
@@ -69,113 +106,156 @@ void setup() {
 
 
   // Create the task on Core 0 (ESP32 has core 0 and core 1)
-  // xTaskCreatePinnedToCore(
-  //   DW3000_Module,    // Function to run
-  //   "DW3000_Module",  // Name of task
-  //   4096,             // Stack size (words, not bytes)
-  //   &Bot_ID,          // Parameter to pass
-  //   1,                // Priority (1 is usually fine)
-  //   NULL,             // Task handle (not used here)
-  //   0                 // Core to pin to (0 = PRO core)
-  // );
+  xTaskCreatePinnedToCore(
+    DW3000_Module,    // Function to run
+    "DW3000_Module",  // Name of task
+    4096,             // Stack size (words, not bytes)
+    &Bot_ID,          // Parameter to pass
+    1,                // Priority (1 is usually fine)
+    NULL,             // Task handle (not used here)
+    0                 // Core to pin to (0 = PRO core)
+  );
 
   // Add base robot, with starting positions and distance must always be 0
-  // swarm.update_robot(Bot_ID, xStart, yStart, 0);  // set base address at origin
+  swarm.update_robot(Bot_ID, xStart, yStart, 0);  // set base address at origin
+
+  targetAngle = MPU_Z_angle();
 
   // This will automatically create a new robot if it doesn't exist, or update it if it has existed
   // swarm.update_robot(0xAA, 2, 2, 2.82);
   // swarm.update_robot(0xBB, 2, 0, 2);
   // swarm.update_robot(0xCC, 0, 2, 2);
+  // swarm.update_robot(0xDD, 2, 0, 2);
+  // swarm.update_robot(0xBB, 0, 2, 2);
 }
+
+MotionParameters motionParamsX;
+MotionParameters motionParamsY;
 
 void DW3000_Module(void* parameter) {
   uint16_t sender_id = *(uint16_t*)parameter;
-
   dwm3000.begin();
 
   while (true) {
     static uint32_t last_switch = 0;
     uint32_t now = millis();
 
-    ////////////////////////////////////////////////////////////////////////////////
-    if (now - last_switch >= random(150, 501)) {
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    if ((now - last_switch >= random(300, 501)) && (is_moving == false)) {  // pinging at around 4 Hz
+                                                                            // if ((now - last_switch >= random(300, 501))) {  // pinging at around 4 Hz
       last_switch = now;
-
+      // /*
+      ////////////////////////////////////////////////////////////////////////////////
+      // Tag mode when active, ping anchors that are listed in the robot network
+      // - If robot is alone in network, ping to itself so that others can find it
+      // - If other robots are present, ping them so that we update our location to them
       //////////////////////////////////////////////////////////////
-      // First remove any stale robots
-      swarm.remove_stale_robots();
+      swarm.remove_stale_robots();                                 // First remove any stale robots
+      std::vector<int16_t> addresses = swarm.get_all_addresses();  // Get all robot addresses in the swarm
 
-      // Get all robot addresses in the swarm
-      std::vector<int16_t> addresses = swarm.get_all_addresses();
-
-      if (addresses.size() == 1) {  //if it doesn't know any other robots, send a msg to itself, so that others can identify it is active
+      if (addresses.size() == 1) {  // if it doesn't know any other robots, send a msg to itself, so that others can identify it is active
         dwm3000.getDistance(Bot_ID, positions, velocities);
-        // Serial.println("send personal address");
       } else {
 
         // Iterate through all robots
         for (int16_t address : addresses) {
           if (address == sender_id) continue;  // Skip our own address
-                                               // for (int i = 0; i < 5; i++) {
-          // Get distance measurement (takes about 5ms per measurement)
-          // Serial.print("Pinging: ");
-          // Serial.println(address,HEX);
-          double distance_received = dwm3000.getDistance(address, positions, velocities);
 
-          if (distance_received != -1 && (distance_received > 0 && distance_received < 50)) {
-            // Get current position info
-            int8_t dw_pos[3], dw_velocity[3];
-            dwm3000.getRobotInfo(dw_pos, dw_velocity);  // update rest of DWM3000 received data
+          int tag_ping_max = 3;  // if pinging fails, retry up to 3 times
+          int retry_count = 0;
+          float distance_received = -1;
 
-            swarm.update_robot(address, dw_pos[0], dw_pos[1], distance_received);  // Update swarm structure with new measurement
+          while (retry_count < tag_ping_max) {
+            distance_received = dwm3000.getDistance(address, positions, velocities);  // Get distance measurement (takes about 5-10ms per measurement)
 
-            ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            if (distance_received != -1 && (distance_received > 0 && distance_received < 50)) {
+              // Get current position info
+              float dw_pos[3], dw_velocity[3];
+              dwm3000.getRobotInfo(dw_pos, dw_velocity);                             // update rest of DWM3000 received data
+              swarm.update_robot(address, dw_pos[0], dw_pos[1], distance_received);  // Update swarm structure with new measurement
+              ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-            if (DEBUG_OUTPUT) {
-              Serial.print("Updated robot 0x");
-              Serial.print(address, HEX);
-              Serial.print(" - Distance: ");
-              Serial.print(distance_received);
-              Serial.print("m, Position: (");
-              Serial.print(dw_pos[0]);
-              Serial.print(", ");
-              Serial.print(dw_pos[1]);
-              Serial.println(")");
+              if (DEBUG_OUTPUT) {
+                Serial.print("Updated robot 0x");
+                Serial.print(address, HEX);
+                Serial.print(" - Distance: ");
+                Serial.print(distance_received);
+                Serial.print("m, Position: (");
+                Serial.print(dw_pos[0]);
+                Serial.print(", ");
+                Serial.print(dw_pos[1]);
+                Serial.println(")");
+              }
+              break;
             }
+            retry_count++;
           }
+          vTaskDelay(10);  // short delay to yield CPU
+        }
+        if (DEBUG_OUTPUT) Serial.println("Completed full swarm measurement cycle");
 
-          vTaskDelay(50);  // short delay to yield CPU
+        if (fixed_base) {
+          float fake_pos[3], dw_velocity[3];
+          swarm.update_base_position(Bot_ID, fake_pos);  // do not update current position
+        } else {
+          bool ret = swarm.update_base_position(Bot_ID, real_pos);  // update current positions
+                                                                    // if (ret) {
+          real_pos[0] = kalmanX.updateFilter(real_pos[0]);
+          real_pos[1] = kalmanY.updateFilter(real_pos[1]);
+          float deltaX_mm = (target_pos_x - real_pos[0]) * 1000;  // Convert to mm
+          float deltaY_mm = (target_pos_y - real_pos[1]) * 1000;
+          Serial.println("");
+          Serial.print("\treal_pos x: ");
+          Serial.print(real_pos[0]);
+          Serial.print("\treal_pos y: ");
+          Serial.print(real_pos[1]);
+          Serial.print("\tdeltaX_mm: ");
+          Serial.print(deltaX_mm);
+          Serial.print("\tdeltaY_mm: ");
+          Serial.print(deltaY_mm);
+          Serial.print("\tis_moving: ");
+          Serial.print(is_moving);
+          Serial.println();
+          Serial.println("");
+          if (((abs(deltaX_mm) > threshold_mm || abs(deltaY_mm) > threshold_mm)) && (is_moving == false) && ((millis() - last_move) > 5000)) {
+            motionParamsX = frontLeftMotor.calculateTrapezoidalProfile(deltaY_mm, 0, 0, 400, 1000, 1000);   // X movement
+            motionParamsY = frontRightMotor.calculateTrapezoidalProfile(deltaX_mm, 0, 0, 400, 1000, 1000);  // Y movement
+            // motionParamsX = frontLeftMotor.calculateTrapezoidalProfile(deltaY_mm, 0, 0, 400);   // X movement
+            // motionParamsY = frontRightMotor.calculateTrapezoidalProfile(deltaX_mm, 0, 0, 400);  // Y movement
+
+            Serial.print("\tMove X: ");
+            Serial.print(deltaX_mm);
+            Serial.print("\tMove Y: ");
+            Serial.print(deltaY_mm);
+
+            // Reset all PIDs
+            frontLeftMotor.resetPID();
+            frontRightMotor.resetPID();
+            backLeftMotor.resetPID();
+            backRightMotor.resetPID();
+            is_moving = true;  // Start movement
+          }
+          Serial.print("\tis_moving: ");
+          Serial.print(is_moving);
+          Serial.println();
           // }
         }
       }
-      if (fixed_base) {
-        double fake_pos[3], dw_velocity[3];
-        swarm.update_base_position(Bot_ID, fake_pos);  // do not update current position
-      } else {
-        swarm.update_base_position(Bot_ID, real_pos);  // update current positions
-      }
-      // positions[3]
-      if (DEBUG_OUTPUT) Serial.println("Completed full swarm measurement cycle");
-
+      // */
     } else {
       ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
       // default back to Anchor mode, listen to any tags and also identify any new addresses that just added into the system
       // - Listen to tags, and if address matches base address, find the distance to it
       // - If address is not base address but another known address, update last addressed time to indicate robot is active in the swarm
       // - If address is unknown, add that as a new address in the system
-      double distance = dwm3000.processIncoming(positions, velocities);
-
+      float distance = dwm3000.processIncoming(positions, velocities);
       if (distance != -1) {
-        // Serial.print("anchor dist found: ");
-        // Serial.println(distance);
-        int8_t dw_pos[3], dw_velocity[3];
+        float dw_pos[3], dw_velocity[3];
         uint16_t address = dwm3000.getRobotInfo(dw_pos, dw_velocity);
         swarm.update_robot(address, dw_pos[0], dw_pos[1], (distance > 0 && distance < 50) ? distance : -1);
-        // Serial.print("New address found: ");
-        // Serial.println(address, HEX);
       }
     }
-    // vTaskDelay(1);  // short delay to yield CPU
+    vTaskDelay(1);  // short delay to yield CPU
   }
 }
 
@@ -184,8 +264,9 @@ void DW3000_Module(void* parameter) {
 void loop() {
 
   delay(2000);
-  MotionParameters motionParamsX = frontLeftMotor.calculateTrapezoidalProfile(-1000, 0, 0, 400);   // X movement
-  MotionParameters motionParamsY = frontRightMotor.calculateTrapezoidalProfile(-1000, 0, 0, 400);  // Y movement
+  motionParamsX = frontLeftMotor.calculateTrapezoidalProfile(1200, 0, 0, 400);   // X movement
+  motionParamsY = frontRightMotor.calculateTrapezoidalProfile(1200, 0, 0, 400);  // Y movement
+  is_moving = true;                                                              // Start movement
 
   // Reset all PIDs
   frontLeftMotor.resetPID();
@@ -193,25 +274,33 @@ void loop() {
   backLeftMotor.resetPID();
   backRightMotor.resetPID();
 
-  float targetAngle = MPU_Z_angle();
-
-  // Run the combined profile
-  while ((motionParamsX.time_step < motionParamsX.T) || (motionParamsY.time_step < motionParamsY.T)) {
-    // followXYProfile(&motionParamsX, &motionParamsY);  // 1.0, 1.0 are direction coefficients
-    followXYProfile(&motionParamsX, &motionParamsY, targetAngle);  // 1.0, 1.0 are direction coefficients
-    Gyro_update();
-  }
 
   while (true) {
+    Gyro_update();
+    // Run the combined profile
+    if (((motionParamsX.time_step < motionParamsX.T) || (motionParamsY.time_step < motionParamsY.T)) && is_moving == true) {
+      followXYProfile(&motionParamsX, &motionParamsY, targetAngle);
+      last_move = millis();
+
+    } else {
+      frontLeftMotor.resetPID();
+      frontRightMotor.resetPID();
+      backLeftMotor.resetPID();
+      backRightMotor.resetPID();
+
+      frontLeftMotor.setMotorPWM(0);
+      frontRightMotor.setMotorPWM(0);
+      backLeftMotor.setMotorPWM(0);
+      backRightMotor.setMotorPWM(0);
+      swarm.print_Robot_Swarm();
+      // vTaskDelay(1000);  // Suspend main loop
+      is_moving = false;  // Movement stopped
+    }
+
     // Gyro_update();
 
     // Print all robot information
-    // swarm.print_Robot_Swarm();
 
-    frontLeftMotor.setMotorPWM(0);
-    frontRightMotor.setMotorPWM(0);
-    backLeftMotor.setMotorPWM(0);
-    backRightMotor.setMotorPWM(0);
 
     // notify();
     // PS4_move(stick_LX, stick_LY, stick_RX, stick_RY);
@@ -254,7 +343,7 @@ void loop() {
 
     // run all motors with according speeds
     // if(fixed_base==false)  motor(motor_Speeds);
-    // vTaskDelay(100);  // Suspend main loop
+    // vTaskDelay(1000);  // Suspend main loop
   }
 }
 
@@ -336,20 +425,15 @@ void followXYProfile(MotionParameters* motionParamsX, MotionParameters* motionPa
         rotationSpeed = constrain(rotationSpeed, -maxRotationSpeed, maxRotationSpeed);
 
         // Debug output
-        Serial.print("AngleErr: ");
-        Serial.print(angleError);
-        Serial.print("° | RotSpeed: ");
-        Serial.print(rotationSpeed);
-        Serial.println(" mm/s");
+        // Serial.print("AngleErr: ");
+        // Serial.print(angleError);
+        // Serial.print("° | RotSpeed: ");
+        // Serial.print(rotationSpeed);
+        // Serial.println(" mm/s");
       }
 
       // Combine X, Y and rotation components for each wheel
       // Mecanum wheel equations with rotation:
-      // FL: Vx - Vy + Vrot
-      // FR: Vx + Vy - Vrot
-      // BL: Vx + Vy + Vrot
-      // BR: Vx - Vy - Vrot
-      // Serial.println(rotationSpeed);
       float fl_speed = current_Vx + current_Vy + rotationSpeed;
       float fr_speed = current_Vx - current_Vy - rotationSpeed;
       float bl_speed = current_Vx - current_Vy + rotationSpeed;

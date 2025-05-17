@@ -198,17 +198,17 @@ public:
 
       ////////////////////////// Apply feedforward and PID signal /////////////////////////////////////
       double PWM_signal = 0;
-      // PWM_signal += feedForward_Control(target_velocity, acceleration);
+      PWM_signal += feedForward_Control(target_velocity, acceleration);
       PWM_signal += PID_Control(target_velocity, measured_velocity);
 
       // Serial.print(acceleration);
       // Serial.print(" , ");
-      Serial.print(target_velocity);
-      Serial.print(" , ");
-      Serial.print(measured_velocity);
-      Serial.print(" , ");
-      Serial.print(PWM_signal);
-      Serial.println();
+      // Serial.print(target_velocity);
+      // Serial.print(" , ");
+      // Serial.print(measured_velocity);
+      // Serial.print(" , ");
+      // Serial.print(PWM_signal);
+      // Serial.println();
 
       setMotorPWM(PWM_signal);
     }
